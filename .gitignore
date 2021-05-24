@@ -339,5 +339,5 @@ wandb/
 # ETC
 output/
 asset/
-
+models/
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,jupyternotebooks,pycharm,macos,windows
