@@ -1,5 +1,4 @@
-### components
-
+### Code Tree
 code  
 ├── README.md  
 ├── args.py  
@@ -16,46 +15,20 @@ code
 ├── evaluation.py  
 ├── inference.py  
 ├── requirements.txt  
-└── train.py  
+└── train.py
 
+### Data
+주요 데이터는 .csv 형태로 제공되며, train/test 합쳐서 총 7,442명의 사용자가 존재합니다. 이 때 이 사용자가 푼 마지막 문항의 정답을 맞출 것인지 예측하는 것이 최종 목표입니다.  
+데이터는 아래와 같은 형태이며, 한 행은 한 사용자가 한 문항을 풀었을 때의 정보와 그 문항을 맞췄는지에 대한 정보가 담겨져 있습니다. 데이터는 모두 Timestamp 기준으로 정렬되어 있습니다.
 
+![image](https://user-images.githubusercontent.com/38639633/119285303-b6933780-bc7c-11eb-865b-ae5d8f4e3727.png)
 
-- `args.py`
-	- 훈련에 필요한 파라미터들을 설정할 수 있는 파일입니다.
-- `inference.py`
-	- 학습이 완료된 모델을 이용해 test 데이터를 기반으로 예측된 csv파일을 생성하는 파일입니다.
-- `train.py`
-	- 메인 파일로 훈련을 시작할 때 사용됩니다.
-- `dkt/trainer.py`
-	- train, validation 등과 같은 실제로 모델이 훈련이 되는 로직이 포함된 파일입니다.
-- `dkt/dataloader.py`
-	- 데이터의 전처리 및 모델에 학습가능한 input 을 만드는 파일입니다.
-- `dkt/model.py`
-	- 3가지 베이스라인 모델이(LSTM, LSTM+ATTN, BERT) 포함된 파일입니다.
-- `dkt/metric.py`
-	- 평가 지표가 정의 된 파일입니다.
-	- roc_auc, accuracy
-- `dkt/criterion.py`
-	- loss함수가 정의된 파일입니다.
-	- BCELoss
-- `dkt/optimizer.py`
-	- 훈련에 사용될 optimizer가 정의된 파일입니다.
-	- Adam, AdamW
-- `dkt/scheduler.py`
-	- learing rate을 조절하기 위한 scheduler가 포함된 파일입니다.
-	- ReduceLROnPlateau, get*linear*schedule*with*warmup
-- `dkt/utils.py`
-	- 그외 훈련과 직접적으로 관련은 없는 로직들을 포함할 수 있는 파일입니다.
-	- 현재는 random seed를 고정하는 함수만 작성되어 있습니다.
+- `userID` 사용자의 고유번호입니다. 총 7,442명의 고유 사용자가 있으며, train/test셋은 이 userID를 기준으로 90/10의 비율로 나누어졌습니다.
+- `assessmentItemID` 문항의 고유번호입니다. 총 9,454개의 고유 문항이 있습니다. 이 일련 번호에 대한 규칙은, P stage 4 - DKT 2강 EDA에서 다루었으니 강의 들어보시면 좋을 것 같습니다.
+- `testId` 시험지의 고유번호입니다. 문항과 시험지의 관계는 아래 그림을 참고하여 이해하시면 됩니다. 총 1,537개의 고유한 시험지가 있습니다.  
+![image](https://user-images.githubusercontent.com/38639633/119285319-beeb7280-bc7c-11eb-876f-3c98125e0381.png)
+- `answerCode` 사용자가 해당 문항을 맞췄는지 여부에 대한 이진 데이터이며 0은 사용자가 해당 문항을 틀린 것, 1은 사용자가 해당 문항을 맞춘 것입니다.
+- `Timestamp` 사용자가 해당문항을 풀기 시작한 시점의 데이터입니다.
+- `KnowledgeTag` 문항 당 하나씩 배정되는 태그로, 일종의 중분류 역할을 합니다. 태그 자체의 정보는 비식별화 되어있지만, 문항을 군집화하는데 사용할 수 있습니다. 912개의 고유 태그가 존재합니다.
 
-### How to use
-
-- 파이썬 스크립트에서 실행
-	1. `pip install -r requirements.txt`
-		1. 이미 패키지들이 설치되어 있을 겁니다!
-	2. `python train.py`
-	3. `python inference.py`
-- 주피터 노트북 실행
-	- `baseline.ipynb` 를 처음 부터 실행시켜주시면 됩니다.
-- 제출
-	- output 폴더 안에 있는 output.csv를 제출해주시면 됩니다.
+Test data에 대해서도 마찬가지이며, 이 때 Timestamp상 가장 마지막에 푼 문항의 answerCode는 모두 -1로 표시되어 있습니다. 여러분들의 과제는 이 -1로 처리되어 있는 interaction의 정답 여부를 맞추는 것입니다.
