@@ -336,4 +336,8 @@ $RECYCLE.BIN/
 # Wandb
 wandb/
 
+# ETC
+output/
+asset/
+
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,jupyternotebooks,pycharm,macos,windows
