@@ -1,21 +1,20 @@
 ### Code Tree
-code  
-├── README.md  
-├── args.py  
-├── baseline.ipynb  
-├── dkt  
-│ ├── criterion.py  
-│ ├── dataloader.py  
-│ ├── metric.py  
-│ ├── model.py  
-│ ├── optimizer.py  
-│ ├── scheduler.py  
-│ ├── trainer.py  
-│ └── utils.py  
-├── evaluation.py  
-├── inference.py  
-├── requirements.txt  
-└── train.py
+    code  
+    ├── README.md  
+    ├── args.py  
+    ├── baseline.ipynb  
+    ├── dkt  
+    │   ├── criterion.py  
+    │   ├── dataloader.py  
+    │   ├── metric.py  
+    │   ├── model.py  
+    │   ├── scheduler.py  
+    │   ├── trainer.py  
+    │   └── utils.py  
+    ├── evaluation.py  
+    ├── inference.py  
+    ├── requirements.txt  
+    └── train.py
 
 ### Data
 주요 데이터는 .csv 형태로 제공되며, train/test 합쳐서 총 7,442명의 사용자가 존재합니다. 이 때 이 사용자가 푼 마지막 문항의 정답을 맞출 것인지 예측하는 것이 최종 목표입니다.  
