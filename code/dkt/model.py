@@ -11,10 +11,7 @@ except:
     from transformers.models.bert.modeling_bert import BertConfig, BertEncoder, BertModel    
 
 
-
-
 class LSTM(nn.Module):
-
     def __init__(self, args):
         super(LSTM, self).__init__()
         self.args = args
@@ -65,13 +62,11 @@ class LSTM(nn.Module):
         batch_size = interaction.size(0)
 
         # Embedding
-
         embed_interaction = self.embedding_interaction(interaction)
         embed_test = self.embedding_test(test)
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
         
-
         embed = torch.cat([embed_interaction,
                            embed_test,
                            embed_question,
@@ -90,7 +85,6 @@ class LSTM(nn.Module):
 
 
 class LSTMATTN(nn.Module):
-
     def __init__(self, args):
         super(LSTMATTN, self).__init__()
         self.args = args
@@ -147,14 +141,12 @@ class LSTMATTN(nn.Module):
 
         return (h, c)
 
-    def forward(self, input):
+    def forward(self, items):
 
-        test, question, tag, _, mask, interaction, _ = input
-
+        test, question, tag, _, mask, interaction, _ = items
         batch_size = interaction.size(0)
 
         # Embedding
-
         embed_interaction = self.embedding_interaction(interaction)
         embed_test = self.embedding_test(test)
         embed_question = self.embedding_question(question)
@@ -223,12 +215,12 @@ class Bert(nn.Module):
 
         # Fully connected layer
         self.fc = nn.Linear(self.args.hidden_dim, 1)
-       
+        
         self.activation = nn.Sigmoid()
 
 
-    def forward(self, input):
-        test, question, tag, _, mask, interaction, _ = input
+    def forward(self, items):
+        test, question, tag, _, mask, interaction, _ = items
         batch_size = interaction.size(0)
 
         # 신나는 embedding
@@ -239,10 +231,8 @@ class Bert(nn.Module):
         embed_tag = self.embedding_tag(tag)
 
         embed = torch.cat([embed_interaction,
-        
                            embed_test,
                            embed_question,
-        
                            embed_tag,], 2)
 
         X = self.comb_proj(embed)
@@ -289,6 +279,7 @@ class LastQueryTransformerEncoderLayer(nn.Module):
         src = self.norm2(src)
         return src
 
+
 class LastQueryTransformer(nn.Module):
     """Some Information about LastQueryTransformer"""
     def __init__(self, args):
@@ -317,8 +308,8 @@ class LastQueryTransformer(nn.Module):
 
         self.activation = nn.Sigmoid()
 
-    def forward(self, input):
-        test, question, tag, _, mask, interaction, _ = input
+    def forward(self, items):
+        test, question, tag, _, mask, interaction, _ = items
 
         batch_size = interaction.size(0)
         
@@ -341,7 +332,7 @@ class LastQueryTransformer(nn.Module):
         out = out.permute(1, 0, 2) # B, S, H
         out, _ = self.lstm(out)
 
-
         out = self.fc(out)
         preds = self.activation(out).view(batch_size, -1)
+        
         return preds
