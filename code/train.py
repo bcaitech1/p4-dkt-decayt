@@ -4,7 +4,7 @@ from dkt.dataloader import Preprocess
 from dkt import trainer
 import torch
 from dkt.utils import setSeeds
-# import wandb
+import wandb
 def main(args):
     wandb.login()
     
