@@ -255,3 +255,93 @@ class Bert(nn.Module):
         preds = self.activation(out).view(batch_size, -1)
 
         return preds
+
+
+class LastQueryTransformerEncoderLayer(nn.Module):
+    """Some Information about LastQueryTransformerEncoderLayer"""
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+        super(LastQueryTransformerEncoderLayer, self).__init__()
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+        self.activation = _get_activation_fn(activation)
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(LastQueryTransformerEncoderLayer, self).__setstate__(state)
+
+    def forward(self, src, src_mask = None, src_key_padding_mask = None):
+        src2 = self.self_attn(src[-1:, :, :], src, src, attn_mask=src_mask,
+                              key_padding_mask=src_key_padding_mask)[0]
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        src = self.norm2(src)
+        return src
+
+class LastQueryTransformer(nn.Module):
+    """Some Information about LastQueryTransformer"""
+    def __init__(self, args):
+        super(LastQueryTransformer, self).__init__()
+        self.hidden_dim = args.hidden_dim
+        self.n_layers = args.n_layers
+        self.n_heads = args.n_heads
+        self.args = args
+        # Embedding Layer
+        self.embedding_interaction = nn.Embedding(3, self.hidden_dim//4)
+        self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim//4)
+        self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim//4)
+        self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim//4)
+
+        # Custom Transformer Encoder
+        self.encoder = LastQueryTransformerEncoderLayer(d_model=args.hidden_dim, nhead=args.n_heads, dropout=args.drop_out)
+
+        # LSTM Layer
+        self.lstm = nn.LSTM(self.hidden_dim,
+                            self.hidden_dim,
+                            self.n_layers,
+                            batch_first=True)
+
+        # Fully Connected Layer
+        self.fc = nn.Linear(self.hidden_dim, 1)
+
+        self.activation = nn.Sigmoid()
+
+    def forward(self, input):
+        test, question, tag, _, mask, interaction, _ = input
+
+        batch_size = interaction.size(0)
+        
+        embed_interaction = self.embedding_interaction(interaction)
+        embed_test = self.embedding_test(test)
+        embed_question = self.embedding_question(question)
+        embed_tag = self.embedding_tag(tag)
+
+        embed = torch.cat([embed_interaction, embed_test, embed_question, embed_tag], -1)
+
+        # mask = mask.unsqueeze(-1)
+        mask = mask.to(dtype=torch.float32)
+        mask = (1.0 - mask) * -10000.0
+
+        mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
+
+        embed = embed.permute(1, 0, 2) # S, B, H
+        out = self.encoder(embed, src_mask=mask)
+
+        out = out.permute(1, 0, 2) # B, S, H
+        out, _ = self.lstm(out)
+
+
+        out = self.fc(out)
+        preds = self.activation(out).view(batch_size, -1)
+        return preds
