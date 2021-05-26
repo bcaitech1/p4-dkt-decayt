@@ -1,3 +1,4 @@
+
 import os
 import argparse
 
@@ -37,7 +38,7 @@ def parse_args(mode='train'):
     parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
     parser.add_argument('--clip_grad', default=10, type=int, help='clip grad')
     parser.add_argument('--patience', default=5, type=int, help='for early stopping')
-    
+    parser.add_argument('--fold', default=None, type=int)
 
     parser.add_argument('--log_steps', default=50, type=int, help='print log per n steps')
     

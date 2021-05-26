@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import wandb
+import json
 
 from .dataloader import get_loaders
 from .optimizer import get_optimizer
@@ -11,7 +12,8 @@ from .metric import get_metric
 from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer
 
 
-def run(args, train_data, valid_data):
+def run(args, train_data, valid_data, fold=""):
+
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
     # only when using warmup scheduler
@@ -25,19 +27,19 @@ def run(args, train_data, valid_data):
     # args에 wandb_name을 설정해주었을때만 wandb로 저장하도록 설정하였습니다.
     if args.wandb_name:
         wandb.init(project='project name', entity='ekzm8523', config=vars(args))
-        wandb.run.name = args.wandb_name
+        wandb.run.name = f"{args.wandb_name}_{fold}"
         wandb.watch(model)
 
     best_auc = -1
     early_stopping_counter = 0
     for epoch in range(args.n_epochs):
-        print(f"Start Training: Epoch {epoch + 1}")
+        print(f"[{fold}] Start Training: Epoch {epoch + 1}")
         
         ### TRAIN
-        train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args)
+        train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args, fold)
         
         ### VALID
-        auc, acc,_ , _ = validate(valid_loader, model, args)
+        auc, acc,_ , _ = validate(valid_loader, model, args, fold)
 
         ### TODO: model save or early stopping
         if args.wandb_name:
@@ -58,13 +60,14 @@ def run(args, train_data, valid_data):
                     'state_dict': model_to_save.state_dict(),
                 },
                 model_dir=args.model_dir,
-                model_filename='model.pt'
+                model_filename=f'model{fold}.pt',
             )
+
             early_stopping_counter = 0
         else:
             early_stopping_counter += 1
             if early_stopping_counter >= args.patience:
-                print(f'EarlyStopping counter: {early_stopping_counter} out of {args.patience}')
+                print(f'[{fold}] EarlyStopping counter: {early_stopping_counter} out of {args.patience}')
                 break
 
         # scheduler
@@ -74,7 +77,7 @@ def run(args, train_data, valid_data):
             scheduler.step()
 
 
-def train(train_loader, model, optimizer, args):
+def train(train_loader, model, optimizer, args, fold=""):
     model.train()
 
     total_preds = []
@@ -109,12 +112,12 @@ def train(train_loader, model, optimizer, args):
     # Train AUC / ACC
     auc, acc = get_metric(total_targets, total_preds)
     loss_avg = sum(losses)/len(losses)
-    print(f'TRAIN AUC : {auc} ACC : {acc}')
+    print(f'[{fold}]TRAIN AUC : {auc} ACC : {acc}')
 
     return auc, acc, loss_avg
     
 
-def validate(valid_loader, model, args):
+def validate(valid_loader, model, args, fold=""):
     model.eval()
 
     total_preds = []
@@ -140,34 +143,33 @@ def validate(valid_loader, model, args):
 
     # Train AUC / ACC
     auc, acc = get_metric(total_targets, total_preds)
-    print(f'VALID AUC : {auc} ACC : {acc}\n')
+    print(f'[{fold}]VALID AUC : {auc} ACC : {acc}\n')
 
     return auc, acc, total_preds, total_targets
 
 
 def inference(args, test_data):
-    
+
     model = load_model(args)
     model.eval()
     _, test_loader = get_loaders(args, None, test_data)
-    
+
     total_preds = []
     for step, batch in enumerate(test_loader):
         # items -> test, question, tag, correct, mask, interaction, gather_index
         items = process_batch(batch, args)
         preds = model(items)
-        
 
         # predictions
         preds = preds[:, -1]
         preds = preds.to('cpu').detach().numpy()
-            
-        total_preds+=list(preds)
+
+        total_preds += list(preds)
 
     write_path = os.path.join(args.output_dir, "output.csv")
 
     if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)    
+        os.makedirs(args.output_dir)
 
     with open(write_path, 'w', encoding='utf8') as w:
         print("writing prediction : {}".format(write_path))
@@ -254,12 +256,66 @@ def update_params(loss, model, optimizer, args):
 def save_checkpoint(state, model_dir, model_filename):
     print('saving model ...')
     if not os.path.exists(model_dir):
-        os.makedirs(model_dir)    
+        os.makedirs(model_dir)
     torch.save(state, os.path.join(model_dir, model_filename))
 
 
 def load_model(args):    
     model_path = os.path.join(args.model_dir, args.model_name)
+    print("Loading Model from:", model_path)
+    load_state = torch.load(model_path)
+    model = get_model(args)
+
+    # 1. load model state
+    model.load_state_dict(load_state['state_dict'], strict=True)
+    print("Loading Model from:", model_path, "...Finished.")
+
+    return model
+
+# soft voting base
+def kfold_inference(args, test_data):
+
+    fold_total_preds = np.array([])
+    for fold in range(args.fold):
+        model = load_kfold_model(args, fold)
+        model.eval()
+
+        _, test_loader = get_loaders(args, None, test_data)
+
+        total_preds = []
+        for step, batch in enumerate(test_loader):
+            # items -> test, question, tag, correct, mask, interaction, gather_index
+            items = process_batch(batch, args)
+            preds = model(items)
+
+            # predictions
+            preds = preds[:, -1]
+            preds = preds.to('cpu').detach().numpy()
+
+            total_preds += list(preds)
+        print(f"[fold] inference complete")
+        if fold == 0:
+            fold_total_preds = np.array(total_preds)
+        else:
+            fold_total_preds += np.array(total_preds)
+    fold_total_preds /= args.fold
+    fold_total_pred = list(fold_total_preds)
+
+    write_path = os.path.join(args.output_dir, f"{args.fold}_output.csv")
+
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+
+    with open(write_path, 'w', encoding='utf8') as w:
+        print("writing prediction : {}".format(write_path))
+        w.write("id,prediction\n")
+        for id, pred in enumerate(fold_total_pred):
+            w.write('{},{}\n'.format(id, pred))
+
+
+def load_kfold_model(args, fold):
+    model_name = f"{args.model_name[:-3]}{fold}.pt"
+    model_path = os.path.join(args.model_dir, model_name)
     print("Loading Model from:", model_path)
     load_state = torch.load(model_path)
     model = get_model(args)
