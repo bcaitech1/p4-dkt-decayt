@@ -4,14 +4,21 @@ from dkt.dataloader import Preprocess
 from dkt import trainer
 import torch
 from dkt.utils import setSeeds, increment_path
-import wandb
+from sklearn.model_selection import KFold
+import inference
 
 
 def main(args):
 
+
     args.save = False
     if args.wandb_name:
         args.save_dir = f"{args.model_dir}/{args.wandb_name}"
+        args.save = True
+        args.save_dir = increment_path(args.save_dir)
+
+    elif args.is_tensor_board:
+        args.save_dir = f"{args.model_dir}/{args.model}"
         args.save = True
         args.save_dir = increment_path(args.save_dir)
 
@@ -20,12 +27,21 @@ def main(args):
 
     preprocess = Preprocess(args)
     preprocess.load_train_data(args.file_name)
-    train_data = preprocess.get_train_data()
-    
-    train_data, valid_data = preprocess.split_data(train_data)
+    data = preprocess.get_train_data()
 
-    trainer.run(args, train_data, valid_data)
-    
+    if args.fold:
+        k_fold = KFold(n_splits=args.fold, shuffle=True, random_state=args.seed)
+
+        for fold, (train_idx, valid_idx) in enumerate(k_fold.split(data)):
+            train_data = data[train_idx]
+            valid_data = data[valid_idx]
+            trainer.run(args, train_data, valid_data, fold)
+
+        inference.kfold_direct_inference(args)
+    else:
+        train_data, valid_data = preprocess.split_data(data)
+        trainer.run(args, train_data, valid_data)
+        inference.main(args)
 
 if __name__ == "__main__":
     args = parse_args(mode='train')
