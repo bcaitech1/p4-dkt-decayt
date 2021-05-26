@@ -49,7 +49,7 @@ def run(args, train_data, valid_data):
 
         ### TODO: model save or early stopping
         if args.wandb_name:
-            wandb.log({"epoch": epoch,
+            wandb.log({"learning_rate": current_lr,
                        "train_loss": train_loss,
                        "train_auc": train_auc,
                        "train_acc": train_acc,
