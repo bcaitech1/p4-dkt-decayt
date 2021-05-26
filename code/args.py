@@ -40,6 +40,7 @@ def parse_args(mode='train'):
     parser.add_argument('--clip_grad', default=10, type=int, help='clip grad')
     parser.add_argument('--patience', default=5, type=int, help='for early stopping')
     parser.add_argument('--n_fold', default=None, type=int)
+    parser.add_argument('--split_ratio', default=0.7, type=float)
 
     parser.add_argument('--log_steps', default=50, type=int, help='print log per n steps')
 
