@@ -21,52 +21,54 @@ class Preprocess:
     def get_test_data(self):
         return self.test_data
 
-    def split_data(self, data, ratio=0.7, shuffle=True, seed=0):
+    def split_data(self, data, ratio=0.7, shuffle=True):
         """
         split data into two parts with a given ratio.
         """
         if shuffle:
-            random.seed(seed) # fix to default seed 0
+            random.seed(self.args.seed) # fix to default seed 0
             random.shuffle(data)
 
-        size = int(len(data) * ratio)
-        data_1 = data[:size]
-        data_2 = data[size:]
+        cut_size = int(len(data) * ratio)
+        train_data = data[:cut_size]
+        test_data = data[cut_size:]
 
-        return data_1, data_2
+        return train_data, test_data
 
     def __save_labels(self, encoder, name):
         le_path = os.path.join(self.args.asset_dir, name + '_classes.npy')
         np.save(le_path, encoder.classes_)
 
-    def __preprocessing(self, df, is_train = True):
-        cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag']
+    def __preprocessing(self, df, is_train=True):
+        cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag']  # 문항, 시험지, 문항 태
 
         if not os.path.exists(self.args.asset_dir):
             os.makedirs(self.args.asset_dir)
             
         for col in cate_cols:
-            
-            
-            le = LabelEncoder()
+            label_encoder = LabelEncoder()
             if is_train:
                 #For UNKNOWN class
                 a = df[col].unique().tolist() + ['unknown']
-                le.fit(a)
-                self.__save_labels(le, col)
+                label_encoder.fit(a)
+                self.__save_labels(label_encoder, col)
             else:
-                label_path = os.path.join(self.args.asset_dir,col+'_classes.npy')
-                le.classes_ = np.load(label_path)
+                label_path = os.path.join(self.args.asset_dir, col+'_classes.npy')
+                label_encoder.classes_ = np.load(label_path)
                 
-                df[col] = df[col].apply(lambda x: x if x in le.classes_ else 'unknown')
+                df[col] = df[col].apply(lambda x: x if x in label_encoder.classes_ else 'unknown')
 
             #모든 컬럼이 범주형이라고 가정
-            df[col]= df[col].astype(str)
-            test = le.transform(df[col])
+            df[col] = df[col].astype(str)
+            test = label_encoder.transform(df[col])
             df[col] = test
             
 
         def convert_time(s):
+            """
+            2020-03-24 00:17:11 이런식으로 시간을 param으로 받아서 1585009031.0 이렇게 초단위로 변경해서 timestamp로 반환
+            여기서 전처리의 대부분 시간을 아먹음
+            """
             timestamp = time.mktime(datetime.strptime(s, '%Y-%m-%d %H:%M:%S').timetuple())
             return int(timestamp)
 
@@ -80,20 +82,16 @@ class Preprocess:
 
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
-        df = pd.read_csv(csv_file_path)#, nrows=100000)
+        df = pd.read_csv(csv_file_path)     #, nrows=100000)
         df = self.__feature_engineering(df)
         df = self.__preprocessing(df, is_train)
 
         # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
+        self.args.n_questions = len(np.load(os.path.join(self.args.asset_dir, 'assessmentItemID_classes.npy')))
+        self.args.n_test = len(np.load(os.path.join(self.args.asset_dir, 'testId_classes.npy')))
+        self.args.n_tag = len(np.load(os.path.join(self.args.asset_dir, 'KnowledgeTag_classes.npy')))
 
-                
-        self.args.n_questions = len(np.load(os.path.join(self.args.asset_dir,'assessmentItemID_classes.npy')))
-        self.args.n_test = len(np.load(os.path.join(self.args.asset_dir,'testId_classes.npy')))
-        self.args.n_tag = len(np.load(os.path.join(self.args.asset_dir,'KnowledgeTag_classes.npy')))
-        
-
-
-        df = df.sort_values(by=['userID','Timestamp'], axis=0)
+        df = df.sort_values(by=['userID', 'Timestamp'], axis=0)
         columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag']
         group = df[columns].groupby('userID').apply(
                 lambda r: (
@@ -173,18 +171,28 @@ def collate(batch):
     return tuple(col_list)
 
 
-def get_loaders(args, train, valid):
-
+def get_loaders(args, train_data, valid_data):
     pin_memory = False
     train_loader, valid_loader = None, None
     
-    if train is not None:
-        trainset = DKTDataset(train, args)
-        train_loader = torch.utils.data.DataLoader(trainset, num_workers=args.num_workers, shuffle=True,
-                            batch_size=args.batch_size, pin_memory=pin_memory, collate_fn=collate)
-    if valid is not None:
-        valset = DKTDataset(valid, args)
-        valid_loader = torch.utils.data.DataLoader(valset, num_workers=args.num_workers, shuffle=False,
-                            batch_size=args.batch_size, pin_memory=pin_memory, collate_fn=collate)
+    if train_data is not None:
+        train_set = DKTDataset(train_data, args)
+        train_loader = torch.utils.data.DataLoader(
+            train_set,
+            num_workers=args.num_workers,
+            shuffle=True,
+            batch_size=args.batch_size,
+            pin_memory=pin_memory,
+            collate_fn=collate)
+
+    if valid_data is not None:
+        valid_set = DKTDataset(valid_data, args)
+        valid_loader = torch.utils.data.DataLoader(
+            valid_set,
+            num_workers=args.num_workers,
+            shuffle=False,
+            batch_size=args.batch_size,
+            pin_memory=pin_memory,
+            collate_fn=collate)
 
     return train_loader, valid_loader
