@@ -18,6 +18,7 @@ def parse_args(mode='train'):
     parser.add_argument('--model_dir', default='models/', type=str, help='model directory')
     parser.add_argument('--model_name', default='model.pt', type=str, help='model file name')
     parser.add_argument('--wandb_name', default='', type=str, help='save name(wandb, model) 지정안하면 저장안함')
+    parser.add_argument('--is_tensor_board', default=True, type=bool, help='True면 텐서보드 로깅시작')
 
     parser.add_argument('--output_dir', default='output/', type=str, help='output directory')
     parser.add_argument('--test_file_name', default='test_data.csv', type=str, help='test file name')
@@ -32,7 +33,7 @@ def parse_args(mode='train'):
     parser.add_argument('--drop_out', default=0.2, type=float, help='drop out rate')
     
     # 훈련
-    parser.add_argument('--n_epochs', default=20, type=int, help='number of epochs')
+    parser.add_argument('--n_epochs', default=30, type=int, help='number of epochs')
     parser.add_argument('--batch_size', default=64, type=int, help='batch size')
     parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
     parser.add_argument('--clip_grad', default=10, type=int, help='clip grad')

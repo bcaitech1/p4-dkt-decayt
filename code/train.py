@@ -6,12 +6,16 @@ import torch
 from dkt.utils import setSeeds, increment_path
 import wandb
 
-
 def main(args):
 
     args.save = False
     if args.wandb_name:
         args.save_dir = f"{args.model_dir}/{args.wandb_name}"
+        args.save = True
+        args.save_dir = increment_path(args.save_dir)
+
+    elif args.is_tensor_board:
+        args.save_dir = f"{args.model_dir}/{args.model}"
         args.save = True
         args.save_dir = increment_path(args.save_dir)
 
