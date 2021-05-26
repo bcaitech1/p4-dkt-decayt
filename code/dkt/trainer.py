@@ -16,7 +16,6 @@ from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer
 
 def run(args, train_data, valid_data, fold=""):
 
-    args.logger = SummaryWriter(log_dir=args.save_dir)
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
     # only when using warmup scheduler
@@ -56,24 +55,27 @@ def run(args, train_data, valid_data, fold=""):
                        "valid_auc": auc,
                        "valid_acc": acc})
         elif args.is_tensor_board:
-            args.logger.add_scalar("Train/train_loss", train_loss, epoch * len(train_loader))
-            args.logger.add_scalar("Train/train_auc", train_auc, epoch * len(train_loader))
-            args.logger.add_scalar("Train/train_acc", train_acc, epoch * len(train_loader))
-            args.logger.add_scalar("Valid/valid_auc", auc, epoch * len(train_loader))
-            args.logger.add_scalar("Valid/valid_acc", acc, epoch * len(train_loader))
-            args.logger.add_scalar("Train/Learning_Rate", current_lr, epoch * len(train_loader))
+            logger = SummaryWriter(log_dir=args.save_dir)
+            logger.add_scalar("Train/train_loss", train_loss, epoch * len(train_loader))
+            logger.add_scalar("Train/train_auc", train_auc, epoch * len(train_loader))
+            logger.add_scalar("Train/train_acc", train_acc, epoch * len(train_loader))
+            logger.add_scalar("Valid/valid_auc", auc, epoch * len(train_loader))
+            logger.add_scalar("Valid/valid_acc", acc, epoch * len(train_loader))
+            logger.add_scalar("Train/Learning_Rate", current_lr, epoch * len(train_loader))
+
         if auc > best_auc:
             best_auc = auc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
-            model_to_save = model.module if hasattr(model, 'module') else model
-            save_checkpoint(
-                state={
-                    'epoch': epoch + 1,
-                    'state_dict': model_to_save.state_dict(),
-                },
-                model_dir=args.model_dir,
-                model_filename=f'model{fold}.pt',
-            )
+            if args.save:
+                model_to_save = model.module if hasattr(model, 'module') else model
+                save_checkpoint(
+                    state={
+                        'epoch': epoch + 1,
+                        'state_dict': model_to_save.state_dict(),
+                    },
+                    model_dir=args.model_dir,
+                    model_filename=f"{args.model_name}{fold}.pt",
+                )
 
             early_stopping_counter = 0
         else:
@@ -88,6 +90,20 @@ def run(args, train_data, valid_data, fold=""):
         else:
             scheduler.step()
 
+    if args.save:
+        config_path = f"{args.model_dir}{args.model_name}_config.json"
+        if os.path.exists(config_path):
+            with open(config_path) as f:
+                save_args = json.load(f)
+        else:
+            save_args = vars(args)
+        save_args.update({f"[BEST AUC]{args.model_name}{fold}.pt": best_auc})
+        json.dump(
+            save_args,
+            open(f"{args.model_dir}{args.model_name}_config.json", "w"),
+            indent=2,
+            ensure_ascii=False,
+        )
 
 def train(train_loader, model, optimizer, args, fold=""):
     model.train()
@@ -288,7 +304,7 @@ def load_model(args):
 def kfold_inference(args, test_data):
 
     fold_total_preds = np.array([])
-    for fold in range(args.fold):
+    for fold in range(args.n_fold):
         model = load_kfold_model(args, fold)
         model.eval()
 
@@ -310,10 +326,10 @@ def kfold_inference(args, test_data):
             fold_total_preds = np.array(total_preds)
         else:
             fold_total_preds += np.array(total_preds)
-    fold_total_preds /= args.fold
+    fold_total_preds /= args.n_fold
     fold_total_pred = list(fold_total_preds)
 
-    write_path = os.path.join(args.output_dir, f"{args.fold}_output.csv")
+    write_path = os.path.join(args.output_dir, f"{args.n_fold}_output.csv")
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)

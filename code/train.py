@@ -10,7 +10,6 @@ import inference
 
 def main(args):
 
-
     args.save = False
     if args.wandb_name:
         args.save_dir = f"{args.model_dir}/{args.wandb_name}"
@@ -29,8 +28,8 @@ def main(args):
     preprocess.load_train_data(args.file_name)
     data = preprocess.get_train_data()
 
-    if args.fold:
-        k_fold = KFold(n_splits=args.fold, shuffle=True, random_state=args.seed)
+    if args.n_fold:
+        k_fold = KFold(n_splits=args.n_fold, shuffle=True, random_state=args.seed)
 
         for fold, (train_idx, valid_idx) in enumerate(k_fold.split(data)):
             train_data = data[train_idx]
