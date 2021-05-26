@@ -22,6 +22,7 @@ class LSTM(nn.Module):
 
         # Embedding 
         # interaction은 현재 correct로 구성되어있다. correct(1, 2) + padding(0)
+
         self.embedding_interaction = nn.Embedding(3, self.hidden_dim // 3)
         self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim // 3)
         self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim // 3)
