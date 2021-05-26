@@ -28,7 +28,8 @@ def run(args, train_data, valid_data, fold=""):
 
     # args에 wandb_name을 설정해주었을때만 wandb로 저장하도록 설정하였습니다.
     if args.wandb_name:
-        wandb.init(project='project name', entity='ekzm8523', config=vars(args))
+        # wandb.init(project='project name', entity='ekzm8523', config=vars(args))
+        wandb.init(project='dkt', config=vars(args))
         wandb.run.name = f"{args.wandb_name}_{fold}"
         wandb.watch(model)
 
@@ -291,7 +292,7 @@ def save_checkpoint(state, model_dir, model_filename):
 def load_model(args):    
     model_path = os.path.join(args.model_dir, args.model_name)
     print("Loading Model from:", model_path)
-    load_state = torch.load(model_path)
+    load_state = torch.load(f'{model_path}.pt')
     model = get_model(args)
 
     # 1. load model state
