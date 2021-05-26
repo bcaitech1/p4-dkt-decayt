@@ -2,21 +2,16 @@ import os
 import torch
 import numpy as np
 import wandb
-from torch.utils.tensorboard import SummaryWriter
 
 from .dataloader import get_loaders
 from .optimizer import get_optimizer
 from .scheduler import get_scheduler
 from .criterion import get_criterion
 from .metric import get_metric
-from .utils import get_lr
 from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer
 
 
-
-
 def run(args, train_data, valid_data):
-    args.logger = SummaryWriter(log_dir=args.save_dir)
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
     # only when using warmup scheduler
@@ -29,7 +24,7 @@ def run(args, train_data, valid_data):
 
     # args에 wandb_name을 설정해주었을때만 wandb로 저장하도록 설정하였습니다.
     if args.wandb_name:
-        wandb.init(project='DKT', config=vars(args))
+        wandb.init(project='project name', entity='ekzm8523', config=vars(args))
         wandb.run.name = args.wandb_name
         wandb.watch(model)
 
@@ -44,24 +39,15 @@ def run(args, train_data, valid_data):
         ### VALID
         auc, acc,_ , _ = validate(valid_loader, model, args)
 
-        ### LEARNING RATE CAPTURE
-        current_lr = get_lr(optimizer)
-
         ### TODO: model save or early stopping
         if args.wandb_name:
-            wandb.log({"learning_rate": current_lr,
+            wandb.log({"epoch": epoch,
                        "train_loss": train_loss,
                        "train_auc": train_auc,
                        "train_acc": train_acc,
                        "valid_auc": auc,
                        "valid_acc": acc})
-        elif args.is_tensor_board:
-            args.logger.add_scalar("Train/train_loss", train_loss, epoch * len(train_loader))
-            args.logger.add_scalar("Train/train_auc", train_auc, epoch * len(train_loader))
-            args.logger.add_scalar("Train/train_acc", train_acc, epoch * len(train_loader))
-            args.logger.add_scalar("Valid/valid_auc", auc, epoch * len(train_loader))
-            args.logger.add_scalar("Valid/valid_acc", acc, epoch * len(train_loader))
-            args.logger.add_scalar("Train/Learning_Rate", current_lr, epoch * len(train_loader))
+        
         if auc > best_auc:
             best_auc = auc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
