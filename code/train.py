@@ -3,7 +3,7 @@ from args import parse_args
 from dkt.dataloader import Preprocess
 from dkt import trainer
 import torch
-from dkt.utils import setSeeds
+from dkt.utils import setSeeds, increment_path
 import wandb
 
 
