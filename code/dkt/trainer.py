@@ -15,6 +15,8 @@ from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer
 
 
 def run(args, train_data, valid_data, fold=""):
+    # tensorboard logger define
+    logger = SummaryWriter(log_dir=args.save_dir+f'/{fold}')
 
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
@@ -55,14 +57,12 @@ def run(args, train_data, valid_data, fold=""):
                        "valid_auc": auc,
                        "valid_acc": acc})
         elif args.is_tensor_board:
-            logger = SummaryWriter(log_dir=args.save_dir)
             logger.add_scalar("Train/train_loss", train_loss, epoch * len(train_loader))
             logger.add_scalar("Train/train_auc", train_auc, epoch * len(train_loader))
             logger.add_scalar("Train/train_acc", train_acc, epoch * len(train_loader))
             logger.add_scalar("Valid/valid_auc", auc, epoch * len(train_loader))
             logger.add_scalar("Valid/valid_acc", acc, epoch * len(train_loader))
             logger.add_scalar("Train/Learning_Rate", current_lr, epoch * len(train_loader))
-
         if auc > best_auc:
             best_auc = auc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
