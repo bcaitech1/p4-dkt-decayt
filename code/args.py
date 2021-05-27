@@ -40,7 +40,9 @@ def parse_args(mode='train'):
     
 
     parser.add_argument('--log_steps', default=50, type=int, help='print log per n steps')
-    
+
+    # Feature version
+    parser.add_argument('--fversion', default=0, type=int, help='feature version')
 
     ### 중요 ###
     parser.add_argument('--model', default='lstm', type=str, help='model type')

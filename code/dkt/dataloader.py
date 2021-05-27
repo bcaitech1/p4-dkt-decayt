@@ -76,14 +76,45 @@ class Preprocess:
         
         return df
 
-    def __feature_engineering(self, df):
-        #TODO
+    def __feature_engineering(self, df, is_train, fversion):
+        if fversion == 1:
+            df = self.__feature_split_user(df, is_train)
         return df
 
+    def __feature_split_user(self, df, is_train):
+        if is_train:
+            # UserID를 시험지로 나눔
+            arr = []
+            for ele in df.assessmentItemID.values:
+                arr.append(ele[:3])
+            newID = [str(e1) + str(e2) for e1, e2 in zip(arr, df["userID"])]
+            df["userID"] = newID
+        else:
+            temp = df.copy()
+            # UserID를 시험지로 나눔
+            grade_arr = []
+            for ele in temp.assessmentItemID.values:
+                grade_arr.append(ele[:3])
+
+            newID = [str(e1) + str(e2) for e1, e2 in zip(grade_arr, temp["userID"])]
+            temp["userID"] = newID
+
+            test_data = temp[temp['answerCode'] == -1]
+            bool_arr = []
+
+            for id in temp['userID']:
+                if id in test_data['userID'].values:
+                    bool_arr.append(True)
+                else:
+                    bool_arr.append(False)
+
+            df = df[bool_arr]
+
+        return df
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
         df = pd.read_csv(csv_file_path)     #, nrows=100000)
-        df = self.__feature_engineering(df)
+        df = self.__feature_engineering(df, is_train, self.args.fversion)
         df = self.__preprocessing(df, is_train)
 
         # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
