@@ -29,7 +29,7 @@ def run(args, train_data, valid_data):
 
     # args에 wandb_name을 설정해주었을때만 wandb로 저장하도록 설정하였습니다.
     if args.wandb_name:
-        wandb.init(project='project name', entity='ekzm8523', config=vars(args))
+        wandb.init(project='DKT', config=vars(args))
         wandb.run.name = args.wandb_name
         wandb.watch(model)
 
