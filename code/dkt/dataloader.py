@@ -26,7 +26,7 @@ class Preprocess:
         split data into two parts with a given ratio.
         """
         if shuffle:
-            random.seed(self.args.seed) # fix to default seed 0
+            random.seed(0) # fix to default seed 0
             random.shuffle(data)
 
         cut_size = int(len(data) * ratio)
@@ -154,7 +154,6 @@ class DKTDataset(torch.utils.data.Dataset):
         seq_len = len(row[0])
 
         test, question, tag, correct = row[0], row[1], row[2], row[3]
-        
 
         cate_cols = [test, question, tag, correct]
 
