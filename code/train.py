@@ -38,7 +38,7 @@ def main(args):
 
         inference.kfold_direct_inference(args)
     else:
-        train_data, valid_data = preprocess.split_data(data)
+        train_data, valid_data = preprocess.split_data(data, ratio=args.split_ratio)
         trainer.run(args, train_data, valid_data)
         inference.main(args)
 
