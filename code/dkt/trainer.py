@@ -290,7 +290,7 @@ def save_checkpoint(state, model_dir, model_filename):
 
 
 def load_model(args):    
-    model_path = os.path.join(args.model_dir, args.model_name)
+    model_path = os.path.join(args.model_dir, args.model_name + '.pt')
     print("Loading Model from:", model_path)
     load_state = torch.load(model_path)
     model = get_model(args)
@@ -343,7 +343,7 @@ def kfold_inference(args, test_data):
 
 
 def load_kfold_model(args, fold):
-    model_name = f"{args.model_name[:-3]}{fold}.pt"
+    model_name = f"{args.model_name}{fold}.pt"
     model_path = os.path.join(args.model_dir, model_name)
     print("Loading Model from:", model_path)
     load_state = torch.load(model_path)

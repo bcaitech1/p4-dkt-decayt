@@ -26,7 +26,7 @@ class Preprocess:
         split data into two parts with a given ratio.
         """
         if shuffle:
-            random.seed(0) # fix to default seed 0
+            random.seed(0)  # fix to default seed 0
             random.shuffle(data)
 
         cut_size = int(len(data) * ratio)
@@ -72,12 +72,12 @@ class Preprocess:
             timestamp = time.mktime(datetime.strptime(s, '%Y-%m-%d %H:%M:%S').timetuple())
             return int(timestamp)
 
-        df['Timestamp'] = df['Timestamp'].apply(convert_time)
+        # df['Timestamp'] = df['Timestamp'].apply(convert_time)
         
         return df
 
-    def __feature_engineering(self, df, is_train, fversion):
-        if fversion == 1:
+    def __feature_engineering(self, df, is_train):
+        if self.args.fversion == 1:
             df = self.__feature_split_user(df, is_train)
         return df
 
@@ -114,7 +114,7 @@ class Preprocess:
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
         df = pd.read_csv(csv_file_path)     #, nrows=100000)
-        df = self.__feature_engineering(df, is_train, self.args.fversion)
+        df = self.__feature_engineering(df, is_train)
         df = self.__preprocessing(df, is_train)
 
         # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
@@ -126,7 +126,7 @@ class Preprocess:
         columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag']
         group = df[columns].groupby('userID').apply(
                 lambda r: (
-                    r['testId'].values, 
+                    r['testId'].values,
                     r['assessmentItemID'].values,
                     r['KnowledgeTag'].values,
                     r['answerCode'].values
@@ -186,7 +186,6 @@ def collate(batch):
     col_list = [[] for _ in range(col_n)]
     max_seq_len = len(batch[0][-1])
 
-        
     # batch의 값들을 각 column끼리 그룹화
     for row in batch:
         for i, col in enumerate(row):
@@ -194,9 +193,8 @@ def collate(batch):
             pre_padded[-len(col):] = col
             col_list[i].append(pre_padded)
 
-
     for i, _ in enumerate(col_list):
-        col_list[i] =torch.stack(col_list[i])
+        col_list[i] = torch.stack(col_list[i])
     
     return tuple(col_list)
 
