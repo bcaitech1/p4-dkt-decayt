@@ -99,6 +99,7 @@ def run(args, train_data, valid_data, fold=""):
         else:
             save_args = vars(args)
         save_args.update({f"[BEST AUC]{args.model_name}{fold}.pt": best_auc})
+        save_args.update({f"end_epoch": epoch})
         json.dump(
             save_args,
             open(f"{args.model_dir}{args.model_name}_config.json", "w"),
