@@ -36,6 +36,7 @@ def run(args, train_data, valid_data, fold=""):
         wandb.watch(model)
 
     best_auc = -1
+    best_epoch = 0
     early_stopping_counter = 0
     for epoch in range(args.n_epochs):
         print(f"[{fold}] Start Training: Epoch {epoch + 1}")
@@ -66,6 +67,7 @@ def run(args, train_data, valid_data, fold=""):
             logger.add_scalar("Train/Learning_Rate", current_lr, epoch * len(train_loader))
         if auc > best_auc:
             best_auc = auc
+            best_epoch = epoch + 1
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
             if args.save:
                 model_to_save = model.module if hasattr(model, 'module') else model
@@ -99,7 +101,10 @@ def run(args, train_data, valid_data, fold=""):
         else:
             save_args = vars(args)
         save_args.update({f"[BEST AUC]{args.model_name}{fold}.pt": best_auc})
-        save_args.update({f"end_epoch": epoch})
+        save_args.update({f"best_epoch": best_epoch})
+        save_args.update({f"end_epoch": epoch + 1})
+
+
         json.dump(
             save_args,
             open(f"{args.model_dir}{args.model_name}_config.json", "w"),
