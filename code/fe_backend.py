@@ -49,6 +49,11 @@ def get_95_quantile(x:Series, method = 'mean'):
     print(f"in range({lower} ~ {upper}) : {round(rate*100)} %")
     return x[x.isin(range(lower, upper))]
 
+def left_merge(df, right, ln, rn):
+    right = Series(right, name = rn)
+    left = df
+    return pd.merge(left, right, 'left', left_on = ln, right_index = True)[rn]
+
 def get_grade(df:DataFrame) -> Series:
     g = df['testId'].apply(lambda row: int(row[2]))
     return g
@@ -145,7 +150,8 @@ def get_user_day_progress(df: DataFrame) -> Series:
     return user_day_progress.dt.days
 
 def get_KnowledgeTag_count(df):
-    return df.groupby('KnowledgeTag')['answerCode'].count()
+    right = df.groupby('KnowledgeTag')['answerCode'].count()
+    return left_merge(df, right, 'KnowledgeTag', 'KnowledgeTag_count')
 
 def get_KnowledgeTag_acc_mean(df):
     right = Series(df.groupby('KnowledgeTag')['answerCode'].mean(), name = 'KnowledgeTag_acc_mean')
@@ -163,10 +169,12 @@ def get_KnowledgeTag_acc_meanU(df):
     return pd.merge(left, right, 'left', left_on = ["userID", "KnowledgeTag"], right_index = True)['KnowledgeTag_acc_meanU']
 
 def get_assessmentItemID_count(df):
-    return df.groupby('assessmentItemID')['answerCode'].count()
+    right = df.groupby('assessmentItemID')['answerCode'].count()
+    return left_merge(df, right, 'assessmentItemID', 'assessmentItemID_count')
 
 def get_assessmentItemID_acc_mean(df):
-    return df.groupby('assessmentItemID')['answerCode'].mean()
+    right = df.groupby('assessmentItemID')['answerCode'].mean()
+    return left_merge(df, right, 'assessmentItemID', 'assessmentItemID_acc_mean')
 
 def get_assessmentItemID_countU(df):
     right = Series(df.groupby(['userID', 'assessmentItemID'])['answerCode'].count(), name="assessmentItemID_countU")
@@ -179,16 +187,19 @@ def get_assessmentItemID_acc_meanU(df):
     return pd.merge(left, right, 'left', left_on=['userID', 'assessmentItemID'], right_index=True)['assessmentItemID_acc_meanU']
 
 def get_userID_count(df):
-    return df.groupby('userID')['answerCode'].count()
+    right = df.groupby('userID')['answerCode'].count()
+    return left_merge(df, right, 'userID', 'userID_count')
 
 def get_userID_acc_mean(df):
-    return df.groupby('userID')['answerCode'].mean()
+    right = df.groupby('userID')['answerCode'].mean()
+    return left_merge(df, right, 'userID', 'userID_acc_mean')
 
 def get_userID_acc_cummean(df):
-    return df.groupby('userID')['answerCode'].expanding().mean()
+    return df.groupby('userID')['answerCode'].expanding().mean().reset_index(drop = True)
 
 def get_userID_acc_mean_recentK(df, K):
-    return df.groupby('userID')['answerCode'].rolling(min_periods = 1, window = K).mean()
+    return df.groupby('userID')['answerCode'].rolling(min_periods=1, window=K).mean().reset_index(drop = True)
+
 
 def get_userID_acc_meanT(df):
     right = Series(df.groupby(['userID', 'testId'])['answerCode'].mean(), name = "userID_acc_meanT")
@@ -196,10 +207,16 @@ def get_userID_acc_meanT(df):
     return pd.merge(left, right, 'left', left_on=['userID', 'testId'], right_index=True)["userID_acc_meanT"]
 
 def get_userID_countT(df):
-    return df.groupby(['userID', 'testId'])['answerCode'].count()
+    right = df.groupby(['userID', 'testId'])['answerCode'].count()
+    return left_merge(df, right, ['userID', 'testId'], 'userID_countT')
 
 def get_testId_count(df):
-    return df.groupby('testId')['answerCode'].count()
+    right = df.groupby('testId')['answerCode'].count()
+    return left_merge(df, right, 'testId', 'testId_count')
+
+def get_testId_acc_mean(df):
+    right = df.groupby('testId')['answerCode'].mean()
+    return left_merge(df, right, 'testId', 'testId_acc_mean')
 
 # 환경설정
 # 경로설정, 타입 지정
@@ -213,20 +230,21 @@ dtype = {
     'KnowledgeTag': 'int16'
 }
 df = None
-def reset():
+def reset(mode='fid'):
     global df
     df = pd.read_csv(csv_file_path, dtype=dtype, parse_dates=['Timestamp'])
     df = df.sort_values(by=['userID', 'Timestamp']).reset_index(drop=True)
-    df['original_order'] = df.index
-    df['school'] = get_school(df)
-    df['grade'] = get_grade(df)
-    df = userID_to_familyUserID(df)
+    if mode.lower() == 'fid':
+        df['original_order'] = df.index
+        df['school'] = get_school(df)
+        df['grade'] = get_grade(df)
+        df = userID_to_familyUserID(df)
     return df
 # endregion
 
 ################################# region 프로세스 #################################
 if __name__ == "__main__123":
-    reset() # reset dataframe
+    reset('base') # reset dataframe
     df['original_order'] = df.index
     df['school'] = get_school(df)
     df['grade'] = get_grade(df)
@@ -248,6 +266,12 @@ if __name__ == "__main__123":
     df['assessmentItemID_acc_meanU'] = get_assessmentItemID_acc_meanU(df)
     df['userID_count'] = get_userID_count(df)
     df['user_acc_mean'] = get_userID_acc_mean(df)
+    df['userID_acc_cummean'] = get_userID_acc_cummean(df)
+    df['userID_acc_mean_recentK'] = get_userID_acc_mean_recentK(df, 50)
+    df['userID_countT'] = get_userID_countT(df)
+    df['userID_acc_meanT'] = get_userID_acc_meanT(df)
+    df['testId_count'] = get_testId_count(df)
+    df['testId_acc_mean'] = get_testId_acc_mean(df)
 #endregion
 ################################# 팩토리 #################################
 df = reset()
@@ -255,7 +279,7 @@ df = reset()
 pd.set_option('display.float_format', "{:.2f}".format)
 pd.set_option('display.max_rows', 10)
 
-y = get_testId_count(df)
+y = get_testId_acc_mean(df)
 y.describe()
 y.mode()
 y.median()
