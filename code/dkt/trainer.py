@@ -4,7 +4,7 @@ import numpy as np
 import wandb
 import json
 from torch.utils.tensorboard import SummaryWriter
-
+from tqdm import tqdm
 from .dataloader import get_loaders
 from .optimizer import get_optimizer
 from .scheduler import get_scheduler
@@ -30,7 +30,7 @@ def run(args, train_data, valid_data, fold=""):
 
     # args에 wandb_name을 설정해주었을때만 wandb로 저장하도록 설정하였습니다.
     if args.wandb_name:
-        wandb.init(project='DKT', config=vars(args))
+        wandb.init(project='dkt', config=vars(args))
         wandb.run.name = args.wandb_name
 
         wandb.watch(model)
@@ -38,12 +38,14 @@ def run(args, train_data, valid_data, fold=""):
     best_auc = -1
     best_epoch = 0
     early_stopping_counter = 0
-    for epoch in range(args.n_epochs):
+    for epoch in tqdm(range(args.n_epochs)):
         print(f"[{fold}] Start Training: Epoch {epoch + 1}")
         
         ### TRAIN
-        train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args, fold)
-        
+        if args.scheduler == 'linear_warmup':
+            train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args, fold, scheduler)
+        else:
+            train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args, fold)
         ### VALID
         auc, acc,_ , _ = validate(valid_loader, model, args, fold)
 
@@ -90,8 +92,7 @@ def run(args, train_data, valid_data, fold=""):
         # scheduler
         if args.scheduler == 'plateau':
             scheduler.step(best_auc)
-        else:
-            scheduler.step()
+        
 
     if args.save:
         config_path = f"{args.model_dir}{args.model_name}_config.json"
@@ -112,7 +113,7 @@ def run(args, train_data, valid_data, fold=""):
             ensure_ascii=False,
         )
 
-def train(train_loader, model, optimizer, args, fold=""):
+def train(train_loader, model, optimizer, args, fold="", scheduler=None):
     model.train()
 
     total_preds = []
@@ -126,7 +127,8 @@ def train(train_loader, model, optimizer, args, fold=""):
 
         loss = compute_loss(preds, targets)
         update_params(loss, model, optimizer, args)
-
+        if args.scheduler == 'linear_warmup':
+            scheduler.step()
         if step % args.log_steps == 0:
             print(f"Training steps: {step} Loss: {str(loss.item())}")
         
@@ -230,8 +232,10 @@ def get_model(args):
 
 # 배치 전처리
 def process_batch(batch, args):
-    test, question, tag, correct, mask = batch
-    
+    if args.fversion >=2:
+        test, question, tag, correct, conts, mask = batch
+    else:
+        test, question, tag, correct, mask = batch
     # change to float
     mask = mask.type(torch.FloatTensor)
     correct = correct.type(torch.FloatTensor)
@@ -263,10 +267,13 @@ def process_batch(batch, args):
     mask = mask.to(args.device)
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
-
-    return (test, question, tag, correct,
-            mask, interaction, gather_index)
-
+    if args.fversion >=2:
+        conts = conts.to(args.device)
+        return (test, question, tag, correct,
+                mask, interaction, gather_index, conts)
+    else:
+        return (test, question, tag, correct,
+                mask, interaction, gather_index)
 
 # loss계산하고 parameter update!
 def compute_loss(preds, targets):
