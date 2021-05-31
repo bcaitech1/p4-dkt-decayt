@@ -306,11 +306,16 @@ class LastQueryTransformer(nn.Module):
         self.n_heads = args.n_heads
         self.args = args
         self.drop_out = args.drop_out
+        self.n_cont = self.args.n_cont
         # Embedding Layer
         self.embedding_interaction = nn.Sequential(nn.Embedding(3, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
         self.embedding_test = nn.Sequential(nn.Embedding(self.args.n_test + 1, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
         self.embedding_question = nn.Sequential(nn.Embedding(self.args.n_questions + 1, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
         self.embedding_tag = nn.Sequential(nn.Embedding(self.args.n_tag + 1, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
+        
+        self.batchNorm = nn.BatchNorm1d(self.n_cont)
+        self.embedding_cont = nn.Sequential(nn.Linear(self.n_cont, self.hidden_dim),
+                         nn.LayerNorm(self.hidden_dim))
 
         self.pos_encoder = PositionalEncoding(self.hidden_dim, self.drop_out) #, self.args.max_seq_len)
         # Custom Transformer Encoder
@@ -329,7 +334,7 @@ class LastQueryTransformer(nn.Module):
         self.activation = nn.Sigmoid()
 
     def forward(self, items):
-        test, question, tag, _, mask, interaction, _ = items
+        test, question, tag, _, mask, interaction, _, conts = items
 
         batch_size = interaction.size(0)
 
@@ -337,8 +342,12 @@ class LastQueryTransformer(nn.Module):
         embed_test = self.embedding_test(test)
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
+        # print(self.n_cont, conts.shape, conts.size())
+        embed_cont = self.batchNorm(conts.view(-1, conts.size(-1)))
+        embed_cont = embed_cont.view(batch_size, -1, conts.size(-1))
+        embed_cont = self.embedding_cont(embed_cont)
 
-        embed = embed_interaction + embed_test + embed_question + embed_tag
+        embed = embed_interaction + embed_test + embed_question + embed_tag + embed_cont
         embed = self.pos_encoder(embed)
         # mask = mask.unsqueeze(-1)
         mask = mask.to(dtype=torch.float32)
