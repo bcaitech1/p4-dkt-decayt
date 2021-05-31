@@ -70,7 +70,7 @@ class LSTM(nn.Module):
         embed = torch.cat([embed_interaction,
                            embed_test,
                            embed_question,
-                           embed_tag, ], 2)
+                           embed_tag, ], 2) # 2 -> dimention
 
         X = self.comb_proj(embed)
 
