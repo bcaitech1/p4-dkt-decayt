@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
+from torch.nn.modules.transformer import _get_activation_fn
 import copy
 import math
 
