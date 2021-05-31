@@ -277,6 +277,24 @@ class LastQueryTransformerEncoderLayer(nn.Module):
         src = self.norm2(src)
         return src
 
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
+
 
 class LastQueryTransformer(nn.Module):
     """Some Information about LastQueryTransformer"""
@@ -287,15 +305,17 @@ class LastQueryTransformer(nn.Module):
         self.n_layers = args.n_layers
         self.n_heads = args.n_heads
         self.args = args
+        self.drop_out = args.drop_out
         # Embedding Layer
-        self.embedding_interaction = nn.Embedding(3, self.hidden_dim // 4)
-        self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim // 4)
-        self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim // 4)
-        self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim // 4)
+        self.embedding_interaction = nn.Sequential(nn.Embedding(3, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
+        self.embedding_test = nn.Sequential(nn.Embedding(self.args.n_test + 1, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
+        self.embedding_question = nn.Sequential(nn.Embedding(self.args.n_questions + 1, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
+        self.embedding_tag = nn.Sequential(nn.Embedding(self.args.n_tag + 1, self.hidden_dim), nn.LayerNorm(self.hidden_dim))
 
+        self.pos_encoder = PositionalEncoding(self.hidden_dim, self.drop_out) #, self.args.max_seq_len)
         # Custom Transformer Encoder
-        self.encoder = LastQueryTransformerEncoderLayer(d_model=args.hidden_dim, nhead=args.n_heads,
-                                                        dropout=args.drop_out)
+        self.encoder = nn.TransformerEncoder(LastQueryTransformerEncoderLayer(d_model=self.hidden_dim, nhead=self.n_heads,
+                                                        dropout=self.drop_out), self.n_layers)
 
         # LSTM Layer
         self.lstm = nn.LSTM(self.hidden_dim,
@@ -318,8 +338,8 @@ class LastQueryTransformer(nn.Module):
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
 
-        embed = torch.cat([embed_interaction, embed_test, embed_question, embed_tag], -1)
-
+        embed = embed_interaction + embed_test + embed_question + embed_tag
+        embed = self.pos_encoder(embed)
         # mask = mask.unsqueeze(-1)
         mask = mask.to(dtype=torch.float32)
         mask = (1.0 - mask) * -10000.0
@@ -327,7 +347,7 @@ class LastQueryTransformer(nn.Module):
         mask = mask.repeat(self.n_heads, 1).unsqueeze(1)
 
         embed = embed.permute(1, 0, 2)  # S, B, H
-        out = self.encoder(embed, src_mask=mask)
+        out = self.encoder(embed, mask=mask)
 
         out = out.permute(1, 0, 2)  # B, S, H
         out, _ = self.lstm(out)
