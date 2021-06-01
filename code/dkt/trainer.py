@@ -11,7 +11,7 @@ from .scheduler import get_scheduler
 from .criterion import get_criterion
 from .metric import get_metric
 from .utils import get_lr
-from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer
+from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer, LastQuery, Saint
 
 
 def run(args, train_data, valid_data, fold=""):
@@ -225,8 +225,13 @@ def get_model(args):
         model = LSTMATTN(args)
     if args.model == 'bert':
         model = Bert(args)
-    if args.model == 'lastquery':
+    if args.model == 'lastquery_old':
         model = LastQueryTransformer(args)
+    if args.model == 'lastquery':
+        model = LastQuery(args)
+    if args.model == 'saint':
+        model = Saint(args)
+        
     return model.to(args.device)
 
 
