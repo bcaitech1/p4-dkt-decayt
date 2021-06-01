@@ -14,7 +14,7 @@ def parse_args(mode='train'):
     parser.add_argument('--data_dir', default='/opt/ml/input/data/train_dataset', type=str, help='data directory')
     parser.add_argument('--asset_dir', default='asset/', type=str, help='data directory')
     
-    parser.add_argument('--file_name', default='train_data.csv', type=str, help='train file name')
+    parser.add_argument('--file_name', default='new_train_data.csv', type=str, help='train file name')
     
     parser.add_argument('--model_dir', default='models/', type=str, help='model directory')
     parser.add_argument('--model_name', default='model', type=str, help='model file name')
@@ -43,13 +43,23 @@ def parse_args(mode='train'):
     parser.add_argument('--split_ratio', default=0.7, type=float)
 
     parser.add_argument('--log_steps', default=50, type=int, help='print log per n steps')
-    
+
+    # Feature version
+    parser.add_argument('--fversion', default=2, type=int, help='feature version')
 
     ### 중요 ###
     parser.add_argument('--model', default='lstm', type=str, help='model type')
     parser.add_argument('--optimizer', default='adam', type=str, help='optimizer type')
     parser.add_argument('--scheduler', default='plateau', type=str, help='scheduler type')
     
+    # Data Augmentation
+    parser.add_argument('--aug', default="", type=str, help="Augmentation type (slide or crop)")
+    parser.add_argument('--stride', default=0, type=int, help="stride for slide window")
+    parser.add_argument('--shuffle', default=False, type=bool, help="shuffle for slide window")
+    parser.add_argument('--shuffle_n', default=2, type=int, help="shuffle n")
+    parser.add_argument('--crop_type', default="tiled", type=str, help="crop type for cropped window")
+
+
     args = parser.parse_args()
 
     return args
