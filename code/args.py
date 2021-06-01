@@ -56,6 +56,7 @@ def parse_args(mode='train'):
     parser.add_argument('--aug', default="", type=str, help="Augmentation type (slide or crop)")
     parser.add_argument('--stride', default=0, type=int, help="stride for slide window")
     parser.add_argument('--shuffle', default=False, type=bool, help="shuffle for slide window")
+    parser.add_argument('--shuffle_n', default=2, type=int, help="shuffle n")
     parser.add_argument('--crop_type', default="tiled", type=str, help="crop type for cropped window")
 
 
