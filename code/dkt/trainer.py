@@ -12,12 +12,13 @@ from .criterion import get_criterion
 from .metric import get_metric
 from .utils import get_lr
 from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer, LastQuery, Saint
-
+from .augmentation import data_augmentation
 
 def run(args, train_data, valid_data, fold=""):
     # tensorboard logger define
     logger = SummaryWriter(log_dir=args.save_dir+f'/{fold}')
-
+    if args.aug:
+        train_data = data_augmentation(train_data, args)
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
     # only when using warmup scheduler
