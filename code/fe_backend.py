@@ -8,6 +8,7 @@ from pandas.core.strings.accessor import StringMethods
 from pandas import Timedelta
 import seaborn as sns
 import matplotlib.pyplot as plt
+from typing import *
 from numpy import NaN
 from cyclical import cyclical
 from sklearn import linear_model
@@ -61,6 +62,10 @@ def get_school(df:DataFrame) -> Series:
     g = df['testId'].apply(lambda row: int(row[2]))
     school = g.apply(lambda row: 'elementary_school' if row // 7 == 0 else 'middle_school')
     return school
+def get_familySize(df):
+    right = Series(df.groupby('familyID')['userID'].unique().apply(lambda r: len(r)), name = 'familySize')
+    left = df
+    return pd.merge(left, right, 'left', on = 'familyID')['familySize']
 
 def userID_to_familyUserID(df):
     # 1. generate new_userID dictionary
@@ -83,7 +88,7 @@ def userID_to_familyUserID(df):
 
     # 2. assign familyID & replace userID with new_userID
     df.reset_index(inplace=True)
-    df['familyID'] = df['userID']
+    df['familyID'] = df['userID'].astype('str')
     tqdm.pandas()
     new_userID = df.progress_apply(lambda row: userID_dict[row['userID'], row['school'], row['grade']], axis=1)
 
@@ -91,6 +96,8 @@ def userID_to_familyUserID(df):
     cols = df.columns.to_list()
     new_cols = [cols.pop(-1), *cols]
     df = df[new_cols]
+
+    df = df.sort_values(by=['original_order']).reset_index(drop=True)
 
     return df
 
@@ -101,33 +108,41 @@ def get_time_diff(df:DataFrame, outlier_thres = 80) -> Series:
     df.drop(columns='Timestamp_after', inplace=True)
     td = td.reset_index(drop=True)
     td = td.dt.seconds
-    td.loc[td >= outlier_thres] = NaN  # outlier 처리
-
+    if isinstance(outlier_thres, int):
+        td.loc[td > outlier_thres] = NaN  # outlier 처리
     time_diff = td
     return time_diff
 
-def get_encoded_hour(df: DataFrame) -> Series:
+def get_time_diff_toolong(df:DataFrame, outlier_thres = 79):
+    assert 'time_diff' in df.columns, "time_diff doesnt exist"
+    return df.apply(lambda row: 1 if row['time_diff'] > outlier_thres else 0, axis = 1)
+
+def get_time_diff_userChange(df:DataFrame):
+    assert 'time_diff' in df.columns, "time_diff doesnt exist"
+    return df.apply(lambda row: 1 if row['time_diff'] == np.nan else 0, axis = 1)
+
+def get_encoded_hour(df: DataFrame) -> tuple:
     hour = df['Timestamp'].dt.hour
     hr_sin, hr_cos = cyclical.encode(hour, 24)
-    en_hour = Series(zip(hr_sin, hr_cos))
+    en_hour = (Series(hr_sin), Series(hr_cos))
     return en_hour
 
-def get_encoded_dayoftheweek(df: DataFrame) -> Series:
+def get_encoded_dayoftheweek(df: DataFrame) -> tuple:
     dw = df['Timestamp'].dt.dayofweek
     dw_sin, dw_cos = cyclical.encode(dw, 7)
-    en_dw = Series(zip(dw_sin, dw_cos))
+    en_dw = Series(dw_sin), Series(dw_cos)
     return en_dw
 
-def get_encoded_dayofthemonth(df: DataFrame) -> Series:
+def get_encoded_dayofthemonth(df: DataFrame) -> tuple:
     dm = df['Timestamp'].dt.day
     dm_sin, dm_cos = cyclical.encode(dm, 31)
-    en_dm = Series(zip(dm_sin, dm_cos))
+    en_dm = Series(dm_sin), Series(dm_cos)
     return en_dm
 
-def get_encoded_month(df: DataFrame) -> Series:
+def get_encoded_month(df: DataFrame) -> tuple:
     m = df['Timestamp'].dt.month
     m_sin, m_cos = cyclical.encode(m, 12)
-    en_m = Series(zip(m_sin, m_cos))
+    en_m = Series(m_sin), Series(m_cos)
     return en_m
 
 def get_user_enterDay(df:DataFrame) -> Series:
@@ -176,6 +191,17 @@ def get_assessmentItemID_acc_mean(df):
     right = df.groupby('assessmentItemID')['answerCode'].mean()
     return left_merge(df, right, 'assessmentItemID', 'assessmentItemID_acc_mean')
 
+def get_assessmentItemID_acc_oomean(df):
+    g = df.groupby('assessmentItemID')['answerCode']
+    l = g.count()
+    ool = l - 1
+    right = DataFrame(dict(sum = g.sum(), ool = ool))
+    left = df
+    md = pd.merge(left, right, 'left', left_on='assessmentItemID', right_index=True)
+    oos = md["sum"] - df['answerCode']
+    ool = md["ool"]
+    return oos/ool
+
 def get_assessmentItemID_countU(df):
     right = Series(df.groupby(['userID', 'assessmentItemID'])['answerCode'].count(), name="assessmentItemID_countU")
     left = df
@@ -194,21 +220,67 @@ def get_userID_acc_mean(df):
     right = df.groupby('userID')['answerCode'].mean()
     return left_merge(df, right, 'userID', 'userID_acc_mean')
 
+def get_userID_acc_oomean(df):
+    g = df.groupby('userID')['answerCode']
+    l = g.count()
+    ool = l - 1
+    right = DataFrame(dict(sum = g.sum(), ool = ool))
+    left = df
+    md = pd.merge(left, right, 'left', left_on='userID', right_index=True)
+    oos = md["sum"] - df['answerCode']
+    ool = md["ool"]
+    return oos/ool
+
 def get_userID_acc_cummean(df):
     return df.groupby('userID')['answerCode'].expanding().mean().reset_index(drop = True)
 
 def get_userID_acc_mean_recentK(df, K):
-    return df.groupby('userID')['answerCode'].rolling(min_periods=1, window=K).mean().reset_index(drop = True)
+    m:DataFrame = df.groupby('userID')['answerCode'].rolling(min_periods=K//2, window=K).mean().reset_index()
+    m.sort_values('level_1', inplace = True)
+    m.drop('level_1', axis = 1, inplace = True)
+    m.reset_index(drop = True, inplace = True)
+    return m['answerCode']
 
+def get_userID_acc_oomean_recentK(df, K):
+    s:DataFrame = df.groupby('userID')['answerCode'].rolling(min_periods=(K+1)//2, window=K+1).sum().reset_index()
+
+    s.sort_values('level_1', inplace = True)
+    s.drop(['userID', 'level_1'], axis = 1, inplace = True)
+    s.reset_index(drop = True, inplace = True)
+    ool = K
+    oos = Series(s['answerCode'], dtype = 'float16') - Series(df['answerCode'], dtype = 'float16')
+    return oos/ool
+
+def get_userID_acc_ooWeightedMovingAverage(df, weights):
+    ret = 0
+
+    ma1 = get_userID_acc_oomean_recentK(df, 3)
+    ma2 = get_userID_acc_oomean_recentK(df, 8)
+    ma3 = get_userID_acc_oomean_recentK(df, 15)
+    ma4 = get_userID_acc_oomean_recentK(df, 30)
+    for i in range(len(weights)):
+        ret += [ma1,ma2,ma3,ma4][i] * weights[i]
+    return ret
+
+def get_userID_countT(df):
+    right = df.groupby(['userID', 'testId'])['answerCode'].count()
+    return left_merge(df, right, ['userID', 'testId'], 'userID_countT')
 
 def get_userID_acc_meanT(df):
     right = Series(df.groupby(['userID', 'testId'])['answerCode'].mean(), name = "userID_acc_meanT")
     left = df
     return pd.merge(left, right, 'left', left_on=['userID', 'testId'], right_index=True)["userID_acc_meanT"]
 
-def get_userID_countT(df):
-    right = df.groupby(['userID', 'testId'])['answerCode'].count()
-    return left_merge(df, right, ['userID', 'testId'], 'userID_countT')
+def get_userID_acc_oomeanT(df):
+    g = df.groupby(['userID', 'testId'])['answerCode']
+    l = g.count()
+    ool = l - 1
+    right = DataFrame(dict(sum = g.sum(), ool = ool))
+    left = df
+    md = pd.merge(left, right, 'left', left_on=['userID', 'testId'], right_index=True)
+    oos = md["sum"] - df['answerCode']
+    ool = md["ool"]
+    return oos/ool
 
 def get_testId_count(df):
     right = df.groupby('testId')['answerCode'].count()
@@ -230,30 +302,47 @@ dtype = {
     'KnowledgeTag': 'int16'
 }
 df = None
-def reset(mode='fid'):
+def reset_df(mode='fid'):
     global df
     df = pd.read_csv(csv_file_path, dtype=dtype, parse_dates=['Timestamp'])
     df = df.sort_values(by=['userID', 'Timestamp']).reset_index(drop=True)
+
     if mode.lower() == 'fid':
         df['original_order'] = df.index
         df['school'] = get_school(df)
         df['grade'] = get_grade(df)
         df = userID_to_familyUserID(df)
     return df
+
+def discern_cols(df):
+    cols_not_oomean = []
+    cols_cate = []
+    for cname, cdtype in zip(df.columns, df.dtypes):
+        if 'mean' in cname and not 'oomean' in cname:
+            cols_not_oomean.append(cname)
+        if cdtype == 'object':
+            cols_cate.append(cname)
+    retDict = {'cols_not_oomean': cols_not_oomean, 'cols_cate': cols_cate, 'labels': ['answerCode']}
+    return retDict
+
 # endregion
 
-################################# region 프로세스 #################################
-if __name__ == "__main__123":
-    reset('base') # reset dataframe
+################################# region 프로세스(프론트) #################################
+def upgrade_df(df) -> DataFrame:
     df['original_order'] = df.index
     df['school'] = get_school(df)
     df['grade'] = get_grade(df)
     df = userID_to_familyUserID(df) # 이 부분까지는 reset에 포함돼있음
-    df['time_diff'] = get_time_diff(df, outlier_thres = 80)
-    df['encoded_hour'] = get_encoded_hour(df)
-    df['encoded_dayoftheweek'] = get_encoded_dayoftheweek(df)
-    df['encoded_dayofthemonth'] = get_encoded_dayofthemonth(df)
-    df['encoded_month'] = get_encoded_month(df)
+    df['familySize'] = get_familySize(df)
+    df['time_diff'] = get_time_diff(df, outlier_thres = 122)
+    df['time_diff_toolong'] = get_time_diff_toolong(df, outlier_thres = 120)
+    df['time_diff_userChange'] = get_time_diff_userChange(df)
+    df['time_diff'] = df.set_index('userID')['time_diff'].fillna(df.groupby('userID')['time_diff'].mean()).reset_index(drop = True)
+    df['time_diff'] = df.set_index('testId')['time_diff'].fillna(df.groupby('testId')['time_diff'].mean()).reset_index(drop = True)
+    df['hour_sn'], df['hour_cs'] = get_encoded_hour(df)
+    df['dayoftheweek_sn'], df['dayoftheweek_cs'] = get_encoded_dayoftheweek(df)
+    df['dayofthemonth_sn'], df['dayofthemonth_cs'] = get_encoded_dayofthemonth(df)
+    df['month_sn'], df['month_cs'] = get_encoded_month(df)
     df['user_enterDay'] = get_user_enterDay(df)
     df['user_day_progress'] = get_user_day_progress(df)
     df['KnowledgeTag_count'] = get_KnowledgeTag_count(df)
@@ -262,30 +351,54 @@ if __name__ == "__main__123":
     df['KnowledgeTag_acc_meanU'] = get_KnowledgeTag_acc_meanU(df)
     df['assessmentItemID_count'] = get_assessmentItemID_count(df)
     df['assessmentItemID_acc_mean'] = get_assessmentItemID_acc_mean(df)
+    df['assessmentItemID_acc_oomean'] = get_assessmentItemID_acc_oomean(df)
     df['assessmentItemID_countU'] = get_assessmentItemID_countU(df)
     df['assessmentItemID_acc_meanU'] = get_assessmentItemID_acc_meanU(df)
     df['userID_count'] = get_userID_count(df)
-    df['user_acc_mean'] = get_userID_acc_mean(df)
+    df['userID_acc_mean'] = get_userID_acc_mean(df)
+    df['userID_acc_oomean'] = get_userID_acc_oomean(df)
     df['userID_acc_cummean'] = get_userID_acc_cummean(df)
-    df['userID_acc_mean_recentK'] = get_userID_acc_mean_recentK(df, 50)
+    df['userID_acc_mean_recentK'] = get_userID_acc_mean_recentK(df, 10)
+    df['userID_acc_mean_recentK'] = df.set_index('testId')['userID_acc_mean_recentK'].fillna(df.groupby('testId')['userID_acc_mean_recentK'].mean()).reset_index(drop = True)
+    df['userID_acc_oomean_recentK'] = get_userID_acc_oomean_recentK(df, 10)
+    df['userID_acc_oomean_recentK'] = df.set_index('testId')['userID_acc_oomean_recentK'].fillna(df.groupby('testId')['userID_acc_oomean_recentK'].mean()).reset_index(drop=True)
+    df['userID_acc_ooWeightedMovingAverage'] = get_userID_acc_ooWeightedMovingAverage(df, [0.1,0.5,0.3,1])
+    df['userID_acc_ooWeightedMovingAverage'] = df.set_index('testId')['userID_acc_ooWeightedMovingAverage'].fillna(df.groupby('testId')['userID_acc_ooWeightedMovingAverage'].mean()).reset_index(drop=True)
     df['userID_countT'] = get_userID_countT(df)
     df['userID_acc_meanT'] = get_userID_acc_meanT(df)
+    df['userID_acc_oomeanT'] = get_userID_acc_oomeanT(df)
     df['testId_count'] = get_testId_count(df)
     df['testId_acc_mean'] = get_testId_acc_mean(df)
+    return df
+def load_upgraded_df(path = './upgraded_df.csv'):
+    dtypes = {"original_order": "int64", "userID": "object", "school": "object", "grade": "int64", "familyID": "object",
+              "assessmentItemID": "object", "testId": "object", "answerCode": "int8",
+              "KnowledgeTag": "int16", "familySize": "int64", "time_diff": "float64", "time_diff_toolong": "int64",
+              "time_diff_userChange": "int64", "hour_sn": "float64", "hour_cs": "float64", "dayoftheweek_sn": "float64",
+              "dayoftheweek_cs": "float64", "dayofthemonth_sn": "float64", "dayofthemonth_cs": "float64",
+              "month_sn": "float64", "month_cs": "float64", "user_enterDay": "int64", "user_day_progress": "int64",
+              "KnowledgeTag_count": "int64", "KnowledgeTag_acc_mean": "float64", "KnowledgeTag_countU": "int64",
+              "KnowledgeTag_acc_meanU": "float64", "assessmentItemID_count": "int64",
+              "assessmentItemID_acc_mean": "float64", "assessmentItemID_acc_oomean": "float64",
+              "assessmentItemID_countU": "int64", "assessmentItemID_acc_meanU": "float64", "userID_count": "int64",
+              "userID_acc_mean": "float64", "userID_acc_oomean": "float64", "userID_acc_cummean": "float64",
+              "userID_acc_mean_recentK": "float64", "userID_acc_oomean_recentK": "float16",
+              "userID_acc_ooWeightedMovingAverage": "float16", "userID_countT": "int64", "userID_acc_meanT": "float64",
+              "userID_acc_oomeanT": "float64", "testId_count": "int64", "testId_acc_mean": "float64"}
+    df = pd.read_csv(path, dtype = dtypes, parse_dates = ['Timestamp'])
+    return df
+def quick_start():
+    msg = '''
+    import fe_backend as feb
+    df = feb.reset_df()
+    df = feb.upgrade_df(df)
+    df.to_csv('./upgraded_df.csv')
+    df = feb.load_upgraded_df('./upgraded_df.csv')
+    '''
+    print(msg)
+if __name__ == "__main__":
+    df = reset_df('fid') # fe_backend 에서 작업할 때 사용할 기본처리(grade,school,familyID,userID)만 된 df
 #endregion
-################################# 팩토리 #################################
-df = reset()
 
-pd.set_option('display.float_format', "{:.2f}".format)
-pd.set_option('display.max_rows', 10)
-
-y = get_testId_acc_mean(df)
-y.describe()
-y.mode()
-y.median()
-sum(y == y.mode()[0]) / len(y)
-sum(y.isin(range(1300,1400))) / len(y)
-
-sns.displot(y, bins = 10)
-# sns.regplot(y.index, y)
-plt.show()
+###
+############################### 팩토리 #################################
