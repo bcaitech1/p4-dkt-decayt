@@ -145,7 +145,7 @@ def get_time_diff_toolong(df:DataFrame, outlier_thres = 79):
 
 def get_time_diff_userChange(df:DataFrame):
     assert 'time_diff' in df.columns, "time_diff doesnt exist"
-    return df.apply(lambda row: 1 if row['time_diff'] == np.nan else 0, axis = 1)
+    return df.apply(lambda row: 1 if np.isnan(row['time_diff']) else 0, axis = 1)
 
 def get_encoded_hour(df: DataFrame) -> tuple:
     hour = df['Timestamp'].dt.hour
