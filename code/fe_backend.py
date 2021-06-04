@@ -39,6 +39,30 @@ def lin_regress(data, yvar, xvars):
     result = [intercept, coef]
     return result
 
+def lgbm():
+    # 실제 태스크는 첫번째, 두번째를 맞추는게 아니라 마지막을 맞추는거니까
+    # 한 유저의 시퀀스중에서 후반부를 lgbm 데이터로 써야하는거 아닐까?
+
+    from lightgbm import LGBMClassifier
+    from sklearn.metrics import accuracy_score
+
+    df_train = load_upgraded_df('./upgraded_df_train.csv')
+    cols = discern_cols(df_train)
+
+    x_train = df_train.groupby('userID').nth(-1).reset_index().drop(
+        cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis=1)
+    y_train = df_train.groupby('userID').nth(-1).reset_index()[cols.labels]
+
+    df_test = load_upgraded_df('./upgraded_df_test.csv')
+
+    x_test = df_test.groupby('userID').nth(-2).reset_index().drop(
+        cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis=1)
+    y_test = df_test.groupby('userID').nth(-2).reset_index()[cols.labels]
+
+    model = LGBMClassifier().fit(x_train, y_train)
+    predict = model.predict(x_test)
+    accuracy_score(y_test, predict)
+
 def get_95_quantile(x:Series, method = 'mean'):
     if method.lower() == 'mode':
         center = x.mode()
@@ -422,21 +446,3 @@ if __name__ == "__main__":
 
 ###
 ############################### 팩토리 #################################
-
-from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score
-
-df_train = load_upgraded_df('./upgraded_df_train.csv')
-cols = discern_cols(df_train)
-
-x_train = df_train.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
-y_train = df_train[cols.labels]
-
-df_test = load_upgraded_df('./upgraded_df_test.csv')
-
-x_test = df_test.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
-y_test = df_test[cols.labels]
-
-model = LGBMClassifier().fit(x_train, y_train)
-predict = model.predict(x_test)
-accuracy_score(y_test, predict)
