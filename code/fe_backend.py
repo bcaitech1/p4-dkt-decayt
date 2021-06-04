@@ -218,15 +218,19 @@ def get_assessmentItemID_acc_mean(df):
     return left_merge(df, right, 'assessmentItemID', 'assessmentItemID_acc_mean')
 
 def get_assessmentItemID_acc_oomean(df):
-    g = df.groupby('assessmentItemID')['answerCode']
+    last = df['answerCode'] == -1
+    non_last = df['answerCode'] != -1
+    g = df[non_last].groupby('assessmentItemID')['answerCode']
     l = g.count()
     ool = l - 1
     right = DataFrame(dict(sum = g.sum(), ool = ool))
     left = df
     md = pd.merge(left, right, 'left', left_on='assessmentItemID', right_index=True)
-    oos = md["sum"] - df['answerCode']
-    ool = md["ool"]
-    return oos/ool
+    oos = md["sum"][non_last] - df['answerCode'][non_last]
+    ool = md["ool"][non_last]
+    r1 = oos / ool
+    r2 = md["sum"][last] / l[0]
+    return r1.append(r2)
 
 def get_assessmentItemID_countU(df):
     right = Series(df.groupby(['userID', 'assessmentItemID'])['answerCode'].count(), name="assessmentItemID_countU")
@@ -247,15 +251,19 @@ def get_userID_acc_mean(df):
     return left_merge(df, right, 'userID', 'userID_acc_mean')
 
 def get_userID_acc_oomean(df):
-    g = df.groupby('userID')['answerCode']
+    last = df['answerCode'] == -1
+    non_last = df['answerCode'] != -1
+    g = df[non_last].groupby('userID')['answerCode']
     l = g.count()
     ool = l - 1
     right = DataFrame(dict(sum = g.sum(), ool = ool))
     left = df
     md = pd.merge(left, right, 'left', left_on='userID', right_index=True)
-    oos = md["sum"] - df['answerCode']
-    ool = md["ool"]
-    return oos/ool
+    oos = md["sum"][non_last] - df['answerCode'][non_last]
+    ool = md["ool"][non_last]
+    r1 = oos / ool
+    r2 = md["sum"][last] / l[0]
+    return r1.append(r2)
 
 def get_userID_acc_cummean(df):
     return df.groupby('userID')['answerCode'].expanding().mean().reset_index(drop = True)
@@ -268,14 +276,12 @@ def get_userID_acc_mean_recentK(df, K):
     return m['answerCode']
 
 def get_userID_acc_oomean_recentK(df, K):
-    s:DataFrame = df.groupby('userID')['answerCode'].rolling(min_periods=(K+1)//2, window=K+1).sum().reset_index()
-
-    s.sort_values('level_1', inplace = True)
-    s.drop(['userID', 'level_1'], axis = 1, inplace = True)
-    s.reset_index(drop = True, inplace = True)
-    ool = K
-    oos = Series(s['answerCode'], dtype = 'float16') - Series(df['answerCode'], dtype = 'float16')
-    return oos/ool
+    oom:DataFrame = df.groupby('userID')['answerCode'].rolling(min_periods=K//2, window=K).mean().shift(1)
+    oom = oom.reset_index()
+    oom.sort_values('level_1', inplace = True)
+    oom.drop(['userID', 'level_1'], axis = 1, inplace = True)
+    oom.reset_index(drop = True, inplace = True)
+    return oom
 
 def get_userID_acc_ooWeightedMovingAverage(df, weights):
     ret = 0
@@ -298,15 +304,19 @@ def get_userID_acc_meanT(df):
     return pd.merge(left, right, 'left', left_on=['userID', 'testId'], right_index=True)["userID_acc_meanT"]
 
 def get_userID_acc_oomeanT(df):
-    g = df.groupby(['userID', 'testId'])['answerCode']
+    last = df['answerCode'] == -1
+    non_last = ~last
+    g = df[non_last].groupby(['userID', 'testId'])['answerCode']
     l = g.count()
     ool = l - 1
     right = DataFrame(dict(sum = g.sum(), ool = ool))
     left = df
     md = pd.merge(left, right, 'left', left_on=['userID', 'testId'], right_index=True)
-    oos = md["sum"] - df['answerCode']
-    ool = md["ool"]
-    return oos/ool
+    oos = md["sum"][non_last] - df['answerCode'][non_last]
+    ool = md["ool"][non_last]
+    r1 = oos / ool
+    r2 = md["sum"][last] / l[0]
+    return r1.append(r2)
 
 def get_testId_count(df):
     right = df.groupby('testId')['answerCode'].count()
@@ -317,15 +327,20 @@ def get_testId_acc_mean(df):
     return left_merge(df, right, 'testId', 'testId_acc_mean')
 
 def get_testId_acc_oomean(df):
-    g = df.groupby('testId')['answerCode']
+    last = df['answerCode'] == -1
+    non_last = ~last
+    g = df[non_last].groupby('testId')['answerCode']
     l = g.count()
     ool = l - 1
     right = DataFrame(dict(sum=g.sum(), ool=ool))
     left = df
     md = pd.merge(left, right, 'left', left_on='testId', right_index=True)
-    oos = md["sum"] - df['answerCode']
-    ool = md["ool"]
-    return oos / ool
+    oos = md["sum"][non_last] - df['answerCode'][non_last]
+    ool = md["ool"][non_last]
+    r1 = oos / ool
+    r2 = md["sum"][last] / l[0]
+    return r1.append(r2)
+
 def get_testId_post(df:DataFrame) -> Series:
     g = df['testId'].apply(lambda row: int(row[-3:]))
     return g
@@ -399,6 +414,8 @@ def load_upgraded_df(path='./upgraded_df.csv'):
 def quick_start():
     msg = '''
     import fe_backend as feb
+    import fe_viz as viz
+
     # df_train = feb.load_upgraded_df('./upgraded_df_train.csv')
     df_train = feb.reset_df(mode = 'base')
     df_train = feb.upgrade_df(df_train)
@@ -415,9 +432,11 @@ def quick_start():
 
     x_test = df_test.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
     y_test = df_test[cols.labels]['answerCode']
+    
+    preds = your_model.predict(x_test)
+    viz.viz_model(save_dir = './plots', preds, x_test, y_test, x_train, x_reference = x_train.append(x_test))
     '''
     print(msg)
-
 
 def upgrade_df(df) -> DataFrame:
     df['original_order'] = df.index
@@ -430,10 +449,15 @@ def upgrade_df(df) -> DataFrame:
     df['time_diff_userChange'] = get_time_diff_userChange(df)
     df['time_diff'] = df.set_index('userID')['time_diff'].fillna(df.groupby('userID')['time_diff'].mean()).reset_index(drop = True)
     df['time_diff'] = df.set_index('testId')['time_diff'].fillna(df.groupby('testId')['time_diff'].mean()).reset_index(drop = True)
+    df['hour'] = df['Timestamp'].dt.hour
     df['hour_sn'], df['hour_cs'] = get_encoded_hour(df)
+    df['dayoftheweek'] = df['Timestamp'].dt.dayofweek
     df['dayoftheweek_sn'], df['dayoftheweek_cs'] = get_encoded_dayoftheweek(df)
+    df['dayofthemonth'] = df['Timestamp'].dt.day
     df['dayofthemonth_sn'], df['dayofthemonth_cs'] = get_encoded_dayofthemonth(df)
+    df['month'] = df['Timestamp'].dt.month
     df['month_sn'], df['month_cs'] = get_encoded_month(df)
+    df['year'] = df['Timestamp'].dt.year
     df['user_enterDay'] = get_user_enterDay(df)
     df['user_day_progress'] = get_user_day_progress(df)
     df['KnowledgeTag_count'] = get_KnowledgeTag_count(df)

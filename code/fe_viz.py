@@ -4,11 +4,21 @@ import seaborn as sns
 import pandas as pd
 from time import sleep
 import fe_backend as feb
+from scipy.stats import mannwhitneyu
 
-df = feb.load_upgraded_df('./upgraded_df.csv')
+if __name__ == "__main__":
+    df = feb.load_upgraded_df('./upgraded_df_train.csv')
+    df_train = df
+    cols = discern_cols(df_train)
+    x_train = df_train.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis=1)
+    y_train = df_train[cols.labels]['answerCode']
 
-pd.set_option('display.float_format', "{:.2f}".format)
-pd.set_option('display.max_rows', 1000)
+    df_test = load_upgraded_df('./upgraded_df_test.csv')
+    x_test = df_test.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis=1)
+    y_test = df_test[cols.labels]['answerCode']
+
+    pd.set_option('display.float_format', "{:.2f}".format)
+    pd.set_option('display.max_rows', 1000)
 
 def viz_feature(case = ""):
     if case == "userID_countT":
@@ -168,6 +178,11 @@ def viz_feature(case = ""):
 
         plt.show()
 
+    if case == 'testId_acc_oomean':
+        y = df['testId_acc_oomean']
+        sns.displot(y, bins = 100)
+        plt.show()
+
 def viz_corr_heatmap():
     cols = ["KnowledgeTag_acc_mean","KnowledgeTag_acc_meanU","assessmentItemID_acc_mean","assessmentItemID_acc_meanU","userID_acc_mean","userID_acc_mean_recentK","userID_acc_meanT","testId_acc_mean","assessmentItemID_countU","userID_count","answerCode"]
     df2 = df[cols]
@@ -226,3 +241,69 @@ def logistic():
     labels = df['answerCode']
     model.fit(conti_features, labels)
     model.score(conti_features, labels)
+
+def viz_train_test_dists():
+    result = []
+    i = 0
+    f, axes = plt.subplots(1, 2, sharex=True)
+    f: plt.Figure = f
+    axes: plt.Axes = axes
+
+    for x_kv, y_kv in zip(x_train.iteritems(), x_test.iteritems()):
+        name = x_kv[0]
+        x = x_kv[1]
+        y = y_kv[1]
+
+        f.suptitle(name)
+        f.tight_layout()
+        sns.histplot(x, ax=axes[0], bins=100)
+        axes[0].set_title('train')
+        sns.histplot(y, ax=axes[1], bins=100)
+        axes[1].set_title('test')
+
+        result.append((name, *mannwhitneyu(x, y)))
+
+        i += 1
+        plt.savefig(f'./plots/{i}_{name}.png')
+        plt.cla()
+        plt.clf()
+
+def viz_model(save_dir:str, preds, x_test:DataFrame, y_test:DataFrame, x_train:DataFrame, x_reference:DataFrame):
+    i = 0
+
+    x_correct = x_test[y_test == preds]
+    x_wrong = x_test[y_test != preds]
+
+    for ref, train, test, correct, wrong in zip(x_reference.iteritems(), x_train.iteritems(), x_test.iteritems(), x_correct.iteritems(), x_wrong.iteritems()):
+        f, axes = plt.subplots(1, 3, sharex=True)
+        f: plt.Figure = f
+        axes: plt.Axes = axes
+
+        name = ref[0]
+        x1 = ref[1]
+        x2 = train[1]
+        x3 = test[1]
+        x4 = correct[1]
+        x5 = wrong[1]
+
+        f.suptitle(name)
+        f.tight_layout()
+        sns.histplot(x1, ax=axes[0], color = '#7aa0c4')
+        axes[0].set_title('x_reference')
+
+        sns.histplot(x2, ax=axes[1], color = '#8bcd50', label = "train")
+        sns.histplot(x3, ax=axes[1], color = '#ca82e1', label = "test")
+        axes[1].set_title('train / test')
+        axes[1].legend(prop={'size': 8})
+
+        sns.histplot(x4, ax=axes[2], color = '#8bcd50', label = "correct")
+        sns.histplot(x5, ax=axes[2], color = '#ca82e1', label = "wrong")
+        axes[2].set_title('correct / wrong')
+        axes[2].legend(prop={'size': 8})
+
+        i += 1
+        if save_dir is None:
+            save_dir = './plots'
+        plt.savefig(os.path.join(save_dir, f'{i}_{name}.png'))
+        plt.cla()
+        plt.clf()
