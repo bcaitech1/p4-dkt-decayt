@@ -14,7 +14,7 @@ from cyclical import cyclical
 from sklearn import linear_model
 from tqdm import tqdm
 from collections import namedtuple
-import re
+import scipy
 
 ################################# region 재료 #################################
 
@@ -51,13 +51,13 @@ def lgbm():
 
     x_train = df_train.groupby('userID').nth(-1).reset_index().drop(
         cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis=1)
-    y_train = df_train.groupby('userID').nth(-1).reset_index()[cols.labels]
+    y_train = df_train.groupby('userID').nth(-1).reset_index()[cols.labels]['answerCode']
 
     df_test = load_upgraded_df('./upgraded_df_test.csv')
 
     x_test = df_test.groupby('userID').nth(-2).reset_index().drop(
         cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis=1)
-    y_test = df_test.groupby('userID').nth(-2).reset_index()[cols.labels]
+    y_test = df_test.groupby('userID').nth(-2).reset_index()[cols.labels]['answerCode']
 
     model = LGBMClassifier().fit(x_train, y_train)
     predict = model.predict(x_test)
@@ -316,6 +316,20 @@ def get_testId_acc_mean(df):
     right = df.groupby('testId')['answerCode'].mean()
     return left_merge(df, right, 'testId', 'testId_acc_mean')
 
+def get_testId_acc_oomean(df):
+    g = df.groupby('testId')['answerCode']
+    l = g.count()
+    ool = l - 1
+    right = DataFrame(dict(sum=g.sum(), ool=ool))
+    left = df
+    md = pd.merge(left, right, 'left', left_on='testId', right_index=True)
+    oos = md["sum"] - df['answerCode']
+    ool = md["ool"]
+    return oos / ool
+def get_testId_post(df:DataFrame) -> Series:
+    g = df['testId'].apply(lambda row: int(row[-3:]))
+    return g
+
 # 환경설정
 # 경로설정, 타입 지정
 args = args.parse_args()
@@ -355,9 +369,56 @@ def discern_cols(df):
     retDict = Cols(cols_not_oomean, cols_cate, ["answerCode"])
     return retDict
 
+def min_max_normalization(df):
+    return (df-df.min())/(df.std())
+def mean_std_normalization(df):
+    return (df-df.mean())/df.std()
+
 # endregion
 
 ################################# region 프로세스(프론트) #################################
+def load_upgraded_df(path='./upgraded_df.csv'):
+    dtypes = {"original_order": "int64", "userID": "object", "school": "object", "grade": "int64", "familyID": "object",
+              "assessmentItemID": "object", "testId": "object", "answerCode": "int8", "KnowledgeTag": "int16",
+              "familySize": "int64", "time_diff": "float64", "time_diff_toolong": "int64",
+              "time_diff_userChange": "int64", "hour_sn": "float64", "hour_cs": "float64", "dayoftheweek_sn": "float64",
+              "dayoftheweek_cs": "float64", "dayofthemonth_sn": "float64", "dayofthemonth_cs": "float64",
+              "month_sn": "float64", "month_cs": "float64", "user_enterDay": "int64", "user_day_progress": "int64",
+              "KnowledgeTag_count": "int64", "KnowledgeTag_acc_mean": "float64", "KnowledgeTag_countU": "int64",
+              "KnowledgeTag_acc_meanU": "float64", "assessmentItemID_count": "int64",
+              "assessmentItemID_acc_mean": "float64", "assessmentItemID_acc_oomean": "float64",
+              "assessmentItemID_countU": "int64", "assessmentItemID_acc_meanU": "float64", "userID_count": "int64",
+              "userID_acc_mean": "float64", "userID_acc_oomean": "float64", "userID_acc_cummean": "float64",
+              "userID_acc_mean_recentK": "float64", "userID_acc_oomean_recentK": "float16",
+              "userID_acc_ooWeightedMovingAverage": "float16", "userID_countT": "int64", "userID_acc_meanT": "float64",
+              "userID_acc_oomeanT": "float64", "testId_count": "int64", "testId_acc_mean": "float64"}
+    df = pd.read_csv(path, dtype=dtypes, parse_dates=['Timestamp'], index_col=0)
+    return df
+
+
+def quick_start():
+    msg = '''
+    import fe_backend as feb
+    # df_train = feb.load_upgraded_df('./upgraded_df_train.csv')
+    df_train = feb.reset_df(mode = 'base')
+    df_train = feb.upgrade_df(df_train)
+    df_train.to_csv('./upgraded_df_train.csv')
+    cols = feb.discern_cols(df_train)
+
+    x_train = df_train.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
+    y_train = df_train[cols.labels]['answerCode']
+
+    # df_test = feb.load_upgraded_df('./upgraded_df_test.csv')
+    df_test = feb.reset_df('test')
+    df_test = feb.upgrade_df(df_test)
+    df_test.to_csv('./upgraded_df_test.csv')
+
+    x_test = df_test.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
+    y_test = df_test[cols.labels]['answerCode']
+    '''
+    print(msg)
+
+
 def upgrade_df(df) -> DataFrame:
     df['original_order'] = df.index
     df['school'] = get_school(df)
@@ -399,45 +460,9 @@ def upgrade_df(df) -> DataFrame:
     df['userID_acc_oomeanT'] = get_userID_acc_oomeanT(df)
     df['testId_count'] = get_testId_count(df)
     df['testId_acc_mean'] = get_testId_acc_mean(df)
+    df['testId_acc_oomean'] = get_testId_acc_oomean(df)
+    df['testId_post'] = get_testId_post(df)
     return df
-def load_upgraded_df(path = './upgraded_df.csv'):
-    dtypes = {"original_order": "int64", "userID": "object", "school": "object", "grade": "int64", "familyID": "object",
-              "assessmentItemID": "object", "testId": "object", "answerCode": "int8",
-              "KnowledgeTag": "int16", "familySize": "int64", "time_diff": "float64", "time_diff_toolong": "int64",
-              "time_diff_userChange": "int64", "hour_sn": "float64", "hour_cs": "float64", "dayoftheweek_sn": "float64",
-              "dayoftheweek_cs": "float64", "dayofthemonth_sn": "float64", "dayofthemonth_cs": "float64",
-              "month_sn": "float64", "month_cs": "float64", "user_enterDay": "int64", "user_day_progress": "int64",
-              "KnowledgeTag_count": "int64", "KnowledgeTag_acc_mean": "float64", "KnowledgeTag_countU": "int64",
-              "KnowledgeTag_acc_meanU": "float64", "assessmentItemID_count": "int64",
-              "assessmentItemID_acc_mean": "float64", "assessmentItemID_acc_oomean": "float64",
-              "assessmentItemID_countU": "int64", "assessmentItemID_acc_meanU": "float64", "userID_count": "int64",
-              "userID_acc_mean": "float64", "userID_acc_oomean": "float64", "userID_acc_cummean": "float64",
-              "userID_acc_mean_recentK": "float64", "userID_acc_oomean_recentK": "float16",
-              "userID_acc_ooWeightedMovingAverage": "float16", "userID_countT": "int64", "userID_acc_meanT": "float64",
-              "userID_acc_oomeanT": "float64", "testId_count": "int64", "testId_acc_mean": "float64"}
-    df = pd.read_csv(path, dtype = dtypes, parse_dates = ['Timestamp'], index_col = 0 )
-    return df
-def quick_start():
-    msg = '''
-    import fe_backend as feb
-    # df_train = feb.load_upgraded_df('./upgraded_df_train.csv')
-    df_train = feb.reset_df()
-    df_train = feb.upgrade_df(df_train)
-    df_train.to_csv('./upgraded_df_train.csv')
-    cols = feb.discern_cols(df_train)
-    
-    x_train = df_train.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
-    y_train = df_train[cols.labels]
-    
-    # df_test = feb.load_upgraded_df('./upgraded_df_test.csv')
-    df_test = feb.reset_df('test')
-    df_test = feb.upgrade_df(df_test)
-    df_test.to_csv('./upgraded_df_test.csv')
-    
-    x_test = df_test.drop(cols.not_oomean + cols.cate + cols.labels + ['Timestamp'], axis = 1)
-    y_test = df_test[cols.labels]
-    '''
-    print(msg)
 if __name__ == "__main__":
     # df = reset_df('fid') # fe_backend 에서 작업할 때 사용할 기본처리(grade,school,familyID,userID)만 된 df
     df_train = load_upgraded_df('./upgraded_df_train.csv')
