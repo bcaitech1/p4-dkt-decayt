@@ -10,7 +10,7 @@ def kfold_direct_inference(args):
     args.device = device
 
     preprocess = Preprocess(args)
-    preprocess.load_test_data(args.test_file_name)
+    preprocess.load_test_data(args.test_file_name, train_df=args.file_name)
     test_data = preprocess.get_test_data()
 
     trainer.kfold_inference(args, test_data)
@@ -21,9 +21,8 @@ def main(args):
     args.device = device
 
     preprocess = Preprocess(args)
-    preprocess.load_test_data(args.test_file_name)
+    preprocess.load_test_data(args.test_file_name, train_df=args.file_name)
     test_data = preprocess.get_test_data()
-
     trainer.inference(args, test_data)
     
 
