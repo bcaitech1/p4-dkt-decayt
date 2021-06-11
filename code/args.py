@@ -14,7 +14,7 @@ def parse_args(mode='train'):
     parser.add_argument('--data_dir', default='/opt/ml/input/data/train_dataset', type=str, help='data directory')
     parser.add_argument('--asset_dir', default='asset/', type=str, help='data directory')
     
-    parser.add_argument('--file_name', default='new_train_data.csv', type=str, help='train file name')
+    parser.add_argument('--file_name', default='train_data.csv', type=str, help='train file name')
     
     parser.add_argument('--model_dir', default='models/', type=str, help='model directory')
     parser.add_argument('--model_name', default='model', type=str, help='model file name')
@@ -25,7 +25,7 @@ def parse_args(mode='train'):
     parser.add_argument('--test_file_name', default='test_data.csv', type=str, help='test file name')
     
     parser.add_argument('--max_seq_len', default=20, type=int, help='max sequence length')
-    parser.add_argument('--num_workers', default=1, type=int, help='number of workers')
+    parser.add_argument('--num_workers', default=4, type=int, help='number of workers')
 
     # 모델
     parser.add_argument('--hidden_dim', default=64, type=int, help='hidden dimension size')
@@ -39,8 +39,9 @@ def parse_args(mode='train'):
     parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
     parser.add_argument('--clip_grad', default=10, type=int, help='clip grad')
     parser.add_argument('--patience', default=5, type=int, help='for early stopping')
-    parser.add_argument('--n_fold', default=None, type=int)
+    parser.add_argument('--n_fold', default=5, type=int)
     parser.add_argument('--split_ratio', default=0.7, type=float)
+    parser.add_argument('--custom_val', default=False, type=bool)
 
     parser.add_argument('--log_steps', default=50, type=int, help='print log per n steps')
 
@@ -48,13 +49,13 @@ def parse_args(mode='train'):
     parser.add_argument('--fversion', default=2, type=int, help='feature version')
 
     ### 중요 ###
-    parser.add_argument('--model', default='lstm', type=str, help='model type')
+    parser.add_argument('--model', default='saint', type=str, help='model type')
     parser.add_argument('--optimizer', default='adam', type=str, help='optimizer type')
     parser.add_argument('--scheduler', default='plateau', type=str, help='scheduler type')
     
     # Data Augmentation
     parser.add_argument('--aug', default="", type=str, help="Augmentation type (slide or crop)")
-    parser.add_argument('--stride', default=0, type=int, help="stride for slide window")
+    parser.add_argument('--stride', default=1, type=int, help="stride for slide window")
     parser.add_argument('--shuffle', default=False, type=bool, help="shuffle for slide window")
     parser.add_argument('--shuffle_n', default=2, type=int, help="shuffle n")
     parser.add_argument('--crop_type', default="tiled", type=str, help="crop type for cropped window")

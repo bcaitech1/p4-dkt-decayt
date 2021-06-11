@@ -40,7 +40,7 @@ class Preprocess:
         np.save(le_path, encoder.classes_)
 
     def __preprocessing(self, df, is_train=True):
-        cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag']  # 문항, 시험지, 문항 태
+        cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag', 'grade']  # 문항, 시험지, 문항 태그, 학년
 
         if not os.path.exists(self.args.asset_dir):
             os.makedirs(self.args.asset_dir)
@@ -81,7 +81,9 @@ class Preprocess:
     def __feature_engineering(self, df, is_train, train_df=None):
         if self.args.fversion >= 1:
             df = self.__feature_split_user(df, is_train)
+            pass
         if self.args.fversion >= 2:
+            df['grade'] = df['testId'].apply(lambda row: int(row[2]))
             df = self.__continuous_feature_engineering(df, is_train, train_df)
         return df
 
@@ -126,16 +128,73 @@ class Preprocess:
         correct_a = train_df.groupby(['assessmentItemID'])['answerCode'].agg(['mean', 'sum'])
         correct_a.columns = ["assessment_mean", 'assessment_sum']
 
-        # df.sort_values(by=['userID','Timestamp'], inplace=True)
-    
+        df.sort_values(by=['userID','Timestamp'], inplace=True)
+
+        # time_diff
+        df.Timestamp = pd.to_datetime(df.Timestamp)
+        diff = df.loc[:, ['userID', 'Timestamp']].groupby('userID').diff().shift(-1).fillna(pd.Timedelta(seconds=37))
+        # diff = diff.fillna(pd.Timedelta(seconds=0))
+        diff = diff['Timestamp'].apply(lambda x: x.total_seconds())
+        df['time_diff'] = diff
+        # # 아웃라이어를 보정
+        df['time_diff'] = df['time_diff'].apply(lambda x: x if x < 50 else 37)  
+
         #유저들의 문제 풀이수, 정답 수, 정답률을 시간순으로 누적해서 계산
-        # df['user_correct_answer'] = df.groupby('userID')['answerCode'].transform(lambda x: x.cumsum().shift(1))
-        # df['user_total_answer'] = df.groupby('userID')['answerCode'].cumcount()
-        # df['user_acc'] = df['user_correct_answer']/df['user_total_answer']
+        df['user_correct_answer'] = df.groupby('userID')['answerCode'].transform(lambda x: x.cumsum().shift(1)).fillna(0)
+        df['user_total_answer'] = df.groupby('userID')['answerCode'].cumcount()
+        df['user_acc'] = df['user_correct_answer']/df['user_total_answer']
+        df['user_acc'].fillna(0.65, inplace=True)
+
+        # # 봉진님 FE
+
+        # # user 별 마지막으로 푼 tag로부터 지난 시간, NaN값은 300으로 한다.
+        # prev_timestamp_ac = df.groupby(['userID', 'KnowledgeTag'])[['Timestamp']].shift()
+        # df['diff_time_btw_KnowledgeTag_ids'] = (df['Timestamp'] - prev_timestamp_ac['Timestamp']).fillna(pd.Timedelta(pd.Timedelta(seconds=300)))
+        # df['diff_time_btw_KnowledgeTag_ids'] = df['diff_time_btw_KnowledgeTag_ids'].apply(lambda x: x.total_seconds())
+       
+        # # 각 tag 별 마지막으로 풀었을때 정답 여부
+        # prev_correct_ac = df.groupby(['userID', 'KnowledgeTag'])[['answerCode']].shift()        
+        # df['prev_answered_correctly'] = prev_correct_ac['answerCode'].fillna(0)
+        
+        # #test, item, tag 별 평균 정답률
+        # # df["test_mean"] = df.testId.map(testId_mean_sum['mean'])
+        # # df["ItemID_mean"] = df.assessmentItemID.map(assessmentItemID_mean_sum['mean'])
+        # # df["tag_mean"] = df.KnowledgeTag.map(KnowledgeTag_mean_sum['mean'])
+        
+        # #test, Item, tag 별 상대적 정답률
+        # # df['relative_test_answer'] = df['answerCode'] - df['test_mean']
+        # # df['relative_ItemID_answer'] = df['answerCode'] - df['ItemID_mean']
+        # # df['relative_tag_answer'] = df['answerCode'] - df['tag_mean']
+        
+        # #이동평균선 5, 10, 15, 20, 25, 30
+        # df['ma5'] = df['user_acc'].fillna(0).rolling(window=5).mean().fillna(0.65)
+        # df['ma10'] = df['user_acc'].fillna(0).rolling(window=10).mean().fillna(0.65)
+        # df['ma15'] = df['user_acc'].fillna(0).rolling(window=15).mean().fillna(0.65)
+        # df['ma20'] = df['user_acc'].fillna(0).rolling(window=20).mean().fillna(0.65)
+        # df['ma25'] = df['user_acc'].fillna(0).rolling(window=25).mean().fillna(0.65)
+        # df['ma30'] = df['user_acc'].fillna(0).rolling(window=30).mean().fillna(0.65)
+        
+        # #MACD
+        # df['MACD'] = df['ma15'] - df['ma25']
+        
+        # #Standard Deviation 5,10, 15, 20, 25, 30
+        # df['sd5'] = df['user_acc'].fillna(0).rolling(window=5).std().fillna(0.0)
+        # df['sd10'] = df['user_acc'].fillna(0).rolling(window=10).std().fillna(0.0)
+        # df['sd15'] = df['user_acc'].fillna(0).rolling(window=15).std().fillna(0.0)
+        # df['sd20'] = df['user_acc'].fillna(0).rolling(window=20).std().fillna(0.0)
+        # df['sd25'] = df['user_acc'].fillna(0).rolling(window=25).std().fillna(0.0)
+        # df['sd30'] = df['user_acc'].fillna(0).rolling(window=30).std().fillna(0.0)
+        
+        # #볼린저 밴드
+        # df['Upper BollingerBand'] = df['ma10'] + (df['sd10'] * 3)
+        # df['Lower BollingerBand'] = df['ma10'] - (df['sd10'] * 3)
+        
+        # #이전에 같은 item, tag 몇 번 풀었는지
+        # df['prior_ItemID_frequency'] = df.groupby(['userID', 'assessmentItemID']).cumcount()
+        # df['prior_tag_frequency'] = df.groupby(['userID', 'KnowledgeTag']).cumcount()
 
         # testId와 KnowledgeTag의 전체 정답률은 한번에 계산
         # 아래 데이터는 제출용 데이터셋에 대해서도 재사용
-        
         
         df = pd.merge(df, correct_t, on=['testId'], how="left")
         df = pd.merge(df, correct_k, on=['KnowledgeTag'], how="left")
@@ -156,20 +215,24 @@ class Preprocess:
         self.args.n_questions = len(np.load(os.path.join(self.args.asset_dir, 'assessmentItemID_classes.npy')))
         self.args.n_test = len(np.load(os.path.join(self.args.asset_dir, 'testId_classes.npy')))
         self.args.n_tag = len(np.load(os.path.join(self.args.asset_dir, 'KnowledgeTag_classes.npy')))
+        self.args.n_grade = len(np.load(os.path.join(self.args.asset_dir, 'grade_classes.npy')))
 
         df = df.sort_values(by=['userID', 'Timestamp'], axis=0)
-        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag']
+        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'grade']
         if self.args.fversion >=2:
-            cont_cols = ['test_mean', 'assessment_mean', 'tag_mean']
-            columns += cont_cols
+            cont_cols = ['test_mean', 'assessment_mean', 'tag_mean', 'time_diff', 
+                         'user_total_answer', 'user_acc']
+            # cont_cols = ['time']
             self.args.n_cont = len(cont_cols)
+            columns += cont_cols
             group = df[columns].groupby('userID').apply(
                     lambda r: (
                         r['testId'].values,
                         r['assessmentItemID'].values,
                         r['KnowledgeTag'].values,
                         r['answerCode'].values,
-                        r[cont_cols].values
+                        r['grade'].values,
+                        r[cont_cols].values,
                     )
                 )
         else:
@@ -183,12 +246,66 @@ class Preprocess:
                 )
         return group.values
 
+    def custom_load_data_from_file(self, df, is_train=True, train_df=None):
+        
+        if not is_train:
+            train_df = pd.read_csv(os.path.join(self.args.data_dir, train_df))
+        df = self.__feature_engineering(df, is_train, train_df)
+        df = self.__preprocessing(df, is_train)
+
+        # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
+        self.args.n_questions = len(np.load(os.path.join(self.args.asset_dir, 'assessmentItemID_classes.npy')))
+        self.args.n_test = len(np.load(os.path.join(self.args.asset_dir, 'testId_classes.npy')))
+        self.args.n_tag = len(np.load(os.path.join(self.args.asset_dir, 'KnowledgeTag_classes.npy')))
+        self.args.n_grade = len(np.load(os.path.join(self.args.asset_dir, 'grade_classes.npy')))
+
+        df = df.sort_values(by=['userID', 'Timestamp'], axis=0)
+        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'grade']
+        if self.args.fversion >=2:
+            cont_cols = ['test_mean', 'assessment_mean', 'tag_mean', 'time_diff', 
+                         'user_total_answer', 'user_acc', 
+                        #  'user_correct_answer', 'diff_time_btw_KnowledgeTag_ids',
+                        #  'prev_answered_correctly', 'Upper BollingerBand', 'Lower BollingerBand',
+                        #  'prior_ItemID_frequency', 'prior_tag_frequency',
+                        #  'ma5', 'ma10', 'ma15', 'ma20', 'ma25', 'ma30',
+                        #  'sd5', 'sd10', 'sd15', 'sd20', 'sd25', 'sd30',
+                        #  'MACD',
+                         ]
+            # cont_cols = ['time_diff']
+            self.args.n_cont = len(cont_cols)
+            columns += cont_cols
+            group = df[columns].groupby('userID').apply(
+                    lambda r: (
+                        r['testId'].values,
+                        r['assessmentItemID'].values,
+                        r['KnowledgeTag'].values,
+                        r['answerCode'].values,
+                        r['grade'].values,
+                        r[cont_cols].values,
+                    )
+                )
+        else:
+            group = df[columns].groupby('userID').apply(
+                    lambda r: (
+                        r['testId'].values,
+                        r['assessmentItemID'].values,
+                        r['KnowledgeTag'].values,
+                        r['answerCode'].values,
+                    )
+                )
+        return group.values    
+    
     def load_train_data(self, file_name):
         self.train_data = self.load_data_from_file(file_name)
+    
+    def custom_load_train_data(self, file):
+        self.train_data = self.custom_load_data_from_file(file)
 
     def load_test_data(self, file_name, train_df=None):
         self.test_data = self.load_data_from_file(file_name, is_train= False, train_df=train_df)
 
+    def custom_load_test_data(self, file_name, train_df=None):
+        self.test_data = self.custom_load_data_from_file(file_name, is_train= False, train_df=train_df)
 
 class DKTDataset(torch.utils.data.Dataset):
     def __init__(self, data, args):
@@ -200,11 +317,12 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
         if self.args.fversion >=2:
-            test, question, tag, correct, conts = row[0], row[1], row[2], row[3], row[4]
+            # test, question, tag, correct, grade, conts = row[0], row[1], row[2], row[3], row[4], row[5]
+            test, question, tag, correct, grade, conts = row
         else:
             test, question, tag, correct = row[0], row[1], row[2], row[3]
 
-        cate_cols = [test, question, tag, correct, conts] if self.args.fversion >=2 else [test, question, tag, correct]
+        cate_cols = [test, question, tag, correct, grade, conts] if self.args.fversion >=2 else [test, question, tag, correct]
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:

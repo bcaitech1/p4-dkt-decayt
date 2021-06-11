@@ -11,7 +11,7 @@ from .scheduler import get_scheduler
 from .criterion import get_criterion
 from .metric import get_metric
 from .utils import get_lr
-from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer, LastQuery, Saint
+from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer, LastQuery, Saint, GRU
 from .augmentation import data_augmentation
 
 def run(args, train_data, valid_data, fold=""):
@@ -93,6 +93,8 @@ def run(args, train_data, valid_data, fold=""):
         # scheduler
         if args.scheduler == 'plateau':
             scheduler.step(best_auc)
+        if args.scheduler == 'steplr':
+            scheduler.step()
         
 
     if args.save:
@@ -232,6 +234,9 @@ def get_model(args):
         model = LastQuery(args)
     if args.model == 'saint':
         model = Saint(args)
+    if args.model == 'gru':
+        model = GRU(args)
+    
         
     return model.to(args.device)
 
@@ -239,7 +244,7 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
     if args.fversion >=2:
-        test, question, tag, correct, conts, mask = batch
+        test, question, tag, correct, grade, conts, mask = batch
     else:
         test, question, tag, correct, mask = batch
     # change to float
@@ -247,7 +252,7 @@ def process_batch(batch, args):
     correct = correct.type(torch.FloatTensor)
 
     #  interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
-    #    saint의 경우 decoder에 들어가는 input이다
+    #  saint의 경우 decoder에 들어가는 input이다
     interaction = correct + 1 # 패딩을 위해 correct값에 1을 더해준다.
     interaction = interaction.roll(shifts=1, dims=1)
     interaction[:, 0] = 0 # set padding index to the first sequence
@@ -255,10 +260,20 @@ def process_batch(batch, args):
     interaction_mask[:, 0] = 0
     interaction = (interaction * interaction_mask).to(torch.int64)
 
+    dec_conts = conts[:,:,3]  # time_diff
+    dec_conts = dec_conts.roll(shifts=1, dims=1)
+    dec_conts[:, 0] = 0 # set padding index to the first sequence
+    dec_conts_mask = mask.roll(shifts=1, dims=1)
+    dec_conts_mask[:, 0] = 0
+    dec_conts = (dec_conts * dec_conts_mask).to(torch.float32)
+
+    conts =  torch.cat([conts[:,:,:3], conts[:,:,4:]],2)
+
     #  test_id, question_id, tag
     test = ((test + 1) * mask).to(torch.int64)
     question = ((question + 1) * mask).to(torch.int64)
     tag = ((tag + 1) * mask).to(torch.int64)
+    grade = ((grade + 1) * mask).to(torch.int64)
 
     # gather index
     # 마지막 sequence만 사용하기 위한 index
@@ -270,13 +285,16 @@ def process_batch(batch, args):
     question = question.to(args.device)
     tag = tag.to(args.device)
     correct = correct.to(args.device)
+    grade = grade.to(args.device)
     mask = mask.to(args.device)
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
+    dec_conts = dec_conts.to(args.device)
+    
     if args.fversion >=2:
         conts = conts.to(args.device)
-        return (test, question, tag, correct,
-                mask, interaction, gather_index, conts)
+        return (test, question, tag, correct, grade,
+                mask, interaction, gather_index, conts , dec_conts)
     else:
         return (test, question, tag, correct,
                 mask, interaction, gather_index)
@@ -365,60 +383,6 @@ def kfold_inference(args, test_data):
 
 def load_kfold_model(args, fold):
     model_name = f"{args.model_name}{fold}.pt"
-    model_path = os.path.join(args.model_dir, model_name)
-    print("Loading Model from:", model_path)
-    load_state = torch.load(model_path)
-    model = get_model(args)
-
-    # 1. load model state
-    model.load_state_dict(load_state['state_dict'], strict=True)
-    print("Loading Model from:", model_path, "...Finished.")
-
-    return model
-
-# soft voting base
-def kfold_inference(args, test_data):
-
-    fold_total_preds = np.array([])
-    for fold in range(args.n_fold):
-        model = load_kfold_model(args, fold)
-        model.eval()
-
-        _, test_loader = get_loaders(args, None, test_data)
-
-        total_preds = []
-        for step, batch in enumerate(test_loader):
-            # items -> test, question, tag, correct, mask, interaction, gather_index
-            items = process_batch(batch, args)
-            preds = model(items)
-
-            # predictions
-            preds = preds[:, -1]
-            preds = preds.to('cpu').detach().numpy()
-
-            total_preds += list(preds)
-        print(f"[fold] inference complete")
-        if fold == 0:
-            fold_total_preds = np.array(total_preds)
-        else:
-            fold_total_preds += np.array(total_preds)
-    fold_total_preds /= args.n_fold
-    fold_total_pred = list(fold_total_preds)
-
-    write_path = os.path.join(args.output_dir, f"{args.n_fold}_output.csv")
-
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-
-    with open(write_path, 'w', encoding='utf8') as w:
-        print("writing prediction : {}".format(write_path))
-        w.write("id,prediction\n")
-        for id, pred in enumerate(fold_total_pred):
-            w.write('{},{}\n'.format(id, pred))
-
-
-def load_kfold_model(args, fold):
-    model_name = f"{args.model_name[:-3]}{fold}.pt"
     model_path = os.path.join(args.model_dir, model_name)
     print("Loading Model from:", model_path)
     load_state = torch.load(model_path)
