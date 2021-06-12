@@ -50,7 +50,7 @@ def parse_args(mode='train'):
     parser.add_argument('--fversion', default=2, type=int, help='feature version')
 
     ### 중요 ###
-    parser.add_argument('--model', default='saint', type=str, help='model type')
+    parser.add_argument('--model', default='lstm', type=str, help='model type')
     parser.add_argument('--optimizer', default='adam', type=str, help='optimizer type')
     parser.add_argument('--scheduler', default='plateau', type=str, help='scheduler type')
     
