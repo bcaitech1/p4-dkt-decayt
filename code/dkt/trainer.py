@@ -260,14 +260,15 @@ def process_batch(batch, args):
     interaction_mask[:, 0] = 0
     interaction = (interaction * interaction_mask).to(torch.int64)
 
-    dec_conts = conts[:,:,3]  # time_diff
-    dec_conts = dec_conts.roll(shifts=1, dims=1)
-    dec_conts[:, 0] = 0 # set padding index to the first sequence
-    dec_conts_mask = mask.roll(shifts=1, dims=1)
-    dec_conts_mask[:, 0] = 0
-    dec_conts = (dec_conts * dec_conts_mask).to(torch.float32)
+    if args.model == 'saint':
+        dec_conts = conts[:,:,3]  # time_diff
+        dec_conts = dec_conts.roll(shifts=1, dims=1)
+        dec_conts[:, 0] = 0 # set padding index to the first sequence
+        dec_conts_mask = mask.roll(shifts=1, dims=1)
+        dec_conts_mask[:, 0] = 0
+        dec_conts = (dec_conts * dec_conts_mask).to(torch.float32)
 
-    conts =  torch.cat([conts[:,:,:3], conts[:,:,4:]],2)
+        conts =  torch.cat([conts[:,:,:3], conts[:,:,4:]],2)
 
     #  test_id, question_id, tag
     test = ((test + 1) * mask).to(torch.int64)
@@ -289,12 +290,17 @@ def process_batch(batch, args):
     mask = mask.to(args.device)
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
-    dec_conts = dec_conts.to(args.device)
+    if args.model == 'saint':
+        dec_conts = dec_conts.to(args.device)
     
     if args.fversion >=2:
         conts = conts.to(args.device)
-        return (test, question, tag, correct, grade,
-                mask, interaction, gather_index, conts , dec_conts)
+        if args.model == 'saint':
+            return (test, question, tag, correct, grade,
+                    mask, interaction, gather_index, conts , dec_conts)
+        else:
+            return (test, question, tag, correct, grade,
+                    mask, interaction, gather_index, conts)
     else:
         return (test, question, tag, correct,
                 mask, interaction, gather_index)
