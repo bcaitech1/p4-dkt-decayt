@@ -26,13 +26,14 @@ def kfold_direct_inference(args):
 def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device
-
+    preprocess = Preprocess(args)
+    
     if args.custom_val:
         test_df = pd.read_csv(os.path.join(args.data_dir, args.test_file_name))
         preprocess.custom_load_test_data(test_df, train_df=args.file_name)
         test_data = preprocess.get_test_data()
     else:
-        preprocess = Preprocess(args)
+        
         preprocess.load_test_data(args.test_file_name, train_df=args.file_name)
         test_data = preprocess.get_test_data()
     
