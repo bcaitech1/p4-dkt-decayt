@@ -36,7 +36,7 @@ def main(args):
         # train_df = pd.concat([train_df, tmp]) 
         
         # pseudo labeling
-        pseudo_df = pd.read_csv('/opt/ml/code/output/LGBM 31개 features 1000 boost.csv')['prediction']
+        pseudo_df = pd.read_csv('/opt/ml/code/output/soft_voting_lgbm_top5.csv')['prediction']
         pseudo_labels = np.where(pseudo_df >= 0.5, 1, 0)
         tmp = test_df.copy()
         tmp.loc[tmp.answerCode ==-1, 'answerCode'] = pseudo_labels

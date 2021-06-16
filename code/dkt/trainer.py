@@ -270,6 +270,17 @@ def process_batch(batch, args):
 
         conts =  torch.cat([conts[:,:,:3], conts[:,:,4:]],2)
 
+        # --dec_conts 여러값 넣었을 때 
+        # dec_conts = conts[:,:,3:]  # time_diff
+        # dec_conts = dec_conts.roll(shifts=1, dims=1)
+        # dec_conts[:, 0] = 0 # set padding index to the first sequence
+        # dec_conts_mask = mask.roll(shifts=1, dims=1)
+        # dec_conts_mask[:, 0] = 0
+        # dec_conts_mask = dec_conts_mask.unsqueeze(-1).repeat(1,1,3)  # 다중 dec를 위해 추가 하드코딩 상황
+        # dec_conts = (dec_conts * dec_conts_mask).to(torch.float32)
+
+        # conts =  conts[:,:,:3]
+
     #  test_id, question_id, tag
     test = ((test + 1) * mask).to(torch.int64)
     question = ((question + 1) * mask).to(torch.int64)
