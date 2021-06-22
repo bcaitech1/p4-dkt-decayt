@@ -16,6 +16,9 @@ from .model import LSTM, LSTMATTN, Bert, LastQueryTransformer
 
 def run(args, train_data, valid_data, fold=""):
 
+    # tensorboard logger define
+    logger = SummaryWriter(log_dir=args.save_dir+f'/{fold}')
+
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
     # only when using warmup scheduler
@@ -28,9 +31,9 @@ def run(args, train_data, valid_data, fold=""):
 
     # args에 wandb_name을 설정해주었을때만 wandb로 저장하도록 설정하였습니다.
     if args.wandb_name:
-        # wandb.init(project='project name', entity='ekzm8523', config=vars(args))
-        wandb.init(project='dkt', config=vars(args))
-        wandb.run.name = f"{args.wandb_name}_{fold}"
+        wandb.init(project='DKT', config=vars(args))
+        wandb.run.name = args.wandb_name
+
         wandb.watch(model)
 
     best_auc = -1
@@ -56,14 +59,12 @@ def run(args, train_data, valid_data, fold=""):
                        "valid_auc": auc,
                        "valid_acc": acc})
         elif args.is_tensor_board:
-            logger = SummaryWriter(log_dir=args.save_dir)
             logger.add_scalar("Train/train_loss", train_loss, epoch * len(train_loader))
             logger.add_scalar("Train/train_auc", train_auc, epoch * len(train_loader))
             logger.add_scalar("Train/train_acc", train_acc, epoch * len(train_loader))
             logger.add_scalar("Valid/valid_auc", auc, epoch * len(train_loader))
             logger.add_scalar("Valid/valid_acc", acc, epoch * len(train_loader))
             logger.add_scalar("Train/Learning_Rate", current_lr, epoch * len(train_loader))
-
         if auc > best_auc:
             best_auc = auc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
@@ -113,10 +114,9 @@ def train(train_loader, model, optimizer, args, fold=""):
     total_targets = []
     losses = []
     for step, batch in enumerate(train_loader):
-        # items -> test, question, tag, tag_mean, correct, mask, interaction, gather_index
+        # items -> test, question, tag, correct, tag_mean, mask, interaction, gather_index
         items = process_batch(batch, args)
         preds = model(items)
-        # targets = items[4]  # correct
         targets = items[3]  # correct
 
         loss = compute_loss(preds, targets)
@@ -153,10 +153,9 @@ def validate(valid_loader, model, args, fold=""):
     total_preds = []
     total_targets = []
     for step, batch in enumerate(valid_loader):
-        # items -> test, question, tag, correct, mask, interaction, gather_index
+        # items -> test, question, tag, correct, tag_mean, mask, interaction, gather_index
         items = process_batch(batch, args)
         preds = model(items)
-        # targets = items[4]  # correct
         targets = items[3]  # correct
 
         # predictions
@@ -187,7 +186,7 @@ def inference(args, test_data):
 
     total_preds = []
     for step, batch in enumerate(test_loader):
-        # items -> test, question, tag, correct, mask, interaction, gather_index
+        # items -> test, question, tag, correct, tag_mean, mask, interaction, gather_index
         items = process_batch(batch, args)
         preds = model(items)
 
@@ -226,20 +225,26 @@ def get_model(args):
 
 # 배치 전처리
 def process_batch(batch, args):
-    # test, question, tag, tag_mean, correct, mask = batch
-    test, question, tag, correct, mask = batch
+    test, question, tag, correct, tag_mean, ItemID_mean, test_mean, time, mask = batch
     
     # change to float
     mask = mask.type(torch.FloatTensor)
     correct = correct.type(torch.FloatTensor)
-    # tag_mean = tag_mean.type(torch.FloatTensor)
+    tag_mean = tag_mean.type(torch.FloatTensor)
+    ItemID_mean = ItemID_mean.type(torch.FloatTensor)
+    test_mean = test_mean.type(torch.FloatTensor)
+    time = time.type(torch.FloatTensor)
+    # user_correct_answer = user_correct_answer.type(torch.FloatTensor)
+    # user_total_answer = user_total_answer.type(torch.FloatTensor)
+    # user_acc = user_acc.type(torch.FloatTensor)
 
-    #  interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
-    #  saint의 경우 decoder에 들어가는 input이다
+    # interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
+    # saint의 경우 decoder에 들어가는 input이다
     interaction = correct + 1 # 패딩을 위해 correct값에 1을 더해준다.
     interaction = interaction.roll(shifts=1, dims=1)
-    interaction[:, 0] = 0 # set padding index to the first sequence
-    interaction = (interaction * mask).to(torch.int64)
+    interaction_mask = mask.roll(shifts=1, dims=1)
+    interaction_mask[:, 0] = 0
+    interaction = (interaction * interaction_mask).to(torch.int64)
 
     #  test_id, question_id, tag
     test = ((test + 1) * mask).to(torch.int64)
@@ -255,14 +260,19 @@ def process_batch(batch, args):
     test = test.to(args.device)
     question = question.to(args.device)
     tag = tag.to(args.device)
-    # tag_mean = tag_mean.to(args.device)
     correct = correct.to(args.device)
+    tag_mean = tag_mean.to(args.device)
+    ItemID_mean = ItemID_mean.to(args.device)
+    test_mean = test_mean.to(args.device)
+    time = time.to(args.device)
+    # user_correct_answer = user_correct_answer.to(args.device)
+    # user_total_answer = user_total_answer.to(args.device)
+    # user_acc = user_acc.to(args.device)
     mask = mask.to(args.device)
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
 
-    # return (test, question, tag, tag_mean, correct,
-    return (test, question, tag, correct,
+    return (test, question, tag, correct, tag_mean, ItemID_mean, test_mean, time,
             mask, interaction, gather_index)
 
 
@@ -296,9 +306,9 @@ def save_checkpoint(state, model_dir, model_filename):
 
 
 def load_model(args):    
-    model_path = os.path.join(args.model_dir, args.model_name)
+    model_path = os.path.join(args.model_dir, f'{args.model_name}.pt')
     print("Loading Model from:", model_path)
-    load_state = torch.load(f'{model_path}.pt')
+    load_state = torch.load(model_path)
     model = get_model(args)
 
     # 1. load model state

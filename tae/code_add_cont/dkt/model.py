@@ -1,18 +1,15 @@
-import numpy as np
-import copy
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.transformer import _get_activation_fn
-
+import numpy as np
+import copy
+import math
 
 try:
     from transformers.modeling_bert import BertConfig, BertEncoder, BertModel
 except:
     from transformers.models.bert.modeling_bert import BertConfig, BertEncoder, BertModel
-
 
 
 class LSTM(nn.Module):
@@ -24,20 +21,20 @@ class LSTM(nn.Module):
         self.hidden_dim = self.args.hidden_dim
         self.n_layers = self.args.n_layers
 
-        # Embedding 
+        # Embedding
         # interaction은 현재 correct로 구성되어있다. correct(1, 2) + padding(0)
-
         self.embedding_interaction = nn.Embedding(3, self.hidden_dim // 3)
         self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim // 3)
         self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim // 3)
         self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim // 3)
 
         # 용어가 마땅찮아 수치형이지만 embed로 표현
-        # self.embedding_tag_mean = nn.Sequential(nn.Linear(self.args.n_cont, self.hidden_dim//3),
-        #                  nn.LayerNorm(self.hidden_dim//3))   
-        
+        self.embedding_tag_mean = nn.Sequential(nn.Linear(self.args.n_cont, self.hidden_dim // 2),
+                         nn.LayerNorm(self.hidden_dim // 2))   
+
         # embedding combination projection
-        self.comb_proj = nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim)
+        self.comb_proj = nn.Sequential(nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim // 2),
+                        nn.LayerNorm(self.hidden_dim // 2))
 
         self.lstm = nn.LSTM(self.hidden_dim,
                             self.hidden_dim,
@@ -65,9 +62,8 @@ class LSTM(nn.Module):
         return (h, c)
 
     def forward(self, items):
-        # item: process_batch에서 리턴한 값
-        # test, question, tag, tag_mean, _, mask, interaction, _ = items
-        test, question, tag, _, mask, interaction, _ = items
+        # input: process_batch에서 리턴한 값
+        test, question, tag, _, tag_mean, ItemID_mean, test_mean, time, mask, interaction, _ = items
         batch_size = interaction.size(0)
 
         # Embedding
@@ -78,15 +74,20 @@ class LSTM(nn.Module):
 
         # 수치형 컬럼
         # embed_tag_mean = self.embedding_tag_mean(tag_mean.view(batch_size, -1, 1))
+        cont_concat = torch.cat([tag_mean,
+                                ItemID_mean,
+                                test_mean,
+                                time,
+                                # user_acc,
+                                ], 1)
+        embed_tag_mean = self.embedding_tag_mean(cont_concat.view(batch_size, -1, 4))
 
         embed = torch.cat([embed_interaction,
                            embed_test,
                            embed_question,
                            embed_tag, ], 2)
-                        #    embed_tag_mean, ], 2)
 
-        # X = torch.cat([self.comb_proj(embed) , embed_tag_mean], 2)
-        X = self.comb_proj(embed)
+        X = torch.cat([self.comb_proj(embed) , embed_tag_mean], 2)
 
         hidden = self.init_hidden(batch_size)
         out, hidden = self.lstm(X, hidden)
@@ -115,12 +116,15 @@ class LSTMATTN(nn.Module):
         self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim // 3)
         self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim // 3)
         self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim // 3)
-        
+
         # 용어가 마땅찮아 수치형이지만 embed로 표현
-        # self.embedding_tag_mean = nn.Sequential(nn.Linear(self.args.n_cont, self.hidden_dim//2),
-        #                  nn.LayerNorm(self.hidden_dim//2))   
+        self.embedding_tag_mean = nn.Sequential(nn.Linear(self.args.n_cont, self.hidden_dim // 2),
+                         nn.LayerNorm(self.hidden_dim // 2))   
+
         # embedding combination projection
-        self.comb_proj = nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim)
+        self.comb_proj = nn.Sequential(nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim // 2),
+                        nn.LayerNorm(self.hidden_dim // 2))
+
         self.lstm = nn.LSTM(self.hidden_dim,
                             self.hidden_dim,
                             self.n_layers,
@@ -158,9 +162,8 @@ class LSTMATTN(nn.Module):
         return (h, c)
 
     def forward(self, items):
-        # item: process_batch에서 리턴한 값
-        # test, question, tag, tag_mean, _, mask, interaction, _ = items
-        test, question, tag, _, mask, interaction, _ = items
+        # input: process_batch에서 리턴한 값
+        test, question, tag, _, tag_mean, ItemID_mean, test_mean, time, mask, interaction, _ = items
         batch_size = interaction.size(0)
 
         # Embedding
@@ -169,14 +172,22 @@ class LSTMATTN(nn.Module):
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
 
+        # 수치형 컬럼
+        # embed_tag_mean = self.embedding_tag_mean(tag_mean.view(batch_size, -1, 1))
+        cont_concat = torch.cat([tag_mean,
+                                ItemID_mean,
+                                test_mean,
+                                time,
+                                # user_acc,
+                                ], 1)
+        embed_tag_mean = self.embedding_tag_mean(cont_concat.view(batch_size, -1, 4))
+
         embed = torch.cat([embed_interaction,
                            embed_test,
                            embed_question,
                            embed_tag, ], 2)
-        # # 수치형 컬럼
-        # embed_tag_mean = self.embedding_tag_mean(tag_mean)
-        # X = torch.cat([self.comb_proj(embed) , embed_tag_mean], 2)
-        X = self.comb_proj(embed)
+
+        X = torch.cat([self.comb_proj(embed) , embed_tag_mean], 2)
 
         hidden = self.init_hidden(batch_size)
         out, hidden = self.lstm(X, hidden)
@@ -209,14 +220,19 @@ class Bert(nn.Module):
         self.n_layers = self.args.n_layers
 
         # Embedding
-        # interaction은 현재 correct으로 구성되어있다. correct(1, 2) + padding(0)
+        # interaction은 현재 correct로 구성되어있다. correct(1, 2) + padding(0)
         self.embedding_interaction = nn.Embedding(3, self.hidden_dim // 3)
         self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim // 3)
         self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim // 3)
         self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim // 3)
 
+        # 용어가 마땅찮아 수치형이지만 embed로 표현
+        self.embedding_tag_mean = nn.Sequential(nn.Linear(self.args.n_cont, self.hidden_dim // 2),
+                         nn.LayerNorm(self.hidden_dim // 2))   
+
         # embedding combination projection
-        self.comb_proj = nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim)
+        self.comb_proj = nn.Sequential(nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim // 2),
+                        nn.LayerNorm(self.hidden_dim // 2))
 
         # Bert config
         self.config = BertConfig(
@@ -237,22 +253,32 @@ class Bert(nn.Module):
         self.activation = nn.Sigmoid()
 
     def forward(self, items):
-        test, question, tag, _, mask, interaction, _ = items
+        # input: process_batch에서 리턴한 값
+        test, question, tag, _, tag_mean, ItemID_mean, test_mean, time, mask, interaction, _ = items
         batch_size = interaction.size(0)
 
-        # 신나는 embedding
-
+        # Embedding
         embed_interaction = self.embedding_interaction(interaction)
         embed_test = self.embedding_test(test)
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
+
+        # 수치형 컬럼
+        # embed_tag_mean = self.embedding_tag_mean(tag_mean.view(batch_size, -1, 1))
+        cont_concat = torch.cat([tag_mean,
+                                ItemID_mean,
+                                test_mean,
+                                time,
+                                # user_acc,
+                                ], 1)
+        embed_tag_mean = self.embedding_tag_mean(cont_concat.view(batch_size, -1, 4))
 
         embed = torch.cat([embed_interaction,
                            embed_test,
                            embed_question,
                            embed_tag, ], 2)
 
-        X = self.comb_proj(embed)
+        X = torch.cat([self.comb_proj(embed) , embed_tag_mean], 2)
 
         # Bert
         encoded_layers = self.encoder(inputs_embeds=X, attention_mask=mask)
