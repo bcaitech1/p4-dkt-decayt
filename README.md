@@ -15,14 +15,6 @@
 
 - ***Deep Knowledge Tracing(DKT) description*** :
 
-	- `Input` : Dialogue 내에서 User와 System 발화 쌍 (1 Turn 단위)
-
-	- `Output` : 해당 turn까지 누적된 Domain-Slot-Value의 pair
-
-		![image](https://user-images.githubusercontent.com/38639633/122345725-23030d00-cf83-11eb-8023-e31719205950.png)
-
-- ***Dataset Overview :*** 
-
 	- 주요 데이터는 `.csv` 형태로 제공되며, train/test 합쳐서 총 7,442명의 사용자가 존재합니다. 이 때 이 사용자가 푼 마지막 문항의 정답을 맞출 것인지 예측하는 것이 최종 목표입니다.
 
 		![image](https://user-images.githubusercontent.com/38639633/122147484-f3c1a280-ce93-11eb-8e42-2d8d6ad0fb83.png)
@@ -33,7 +25,7 @@
 
 		- `assessmentItemID` 문항의 고유번호입니다. 총 9,454개의 고유 문항이 있습니다. "A+앞 6자리"는 `testId`의 정보를 나타내고 있으며, 뒤 3자리는 문제의 번호를 의미합니다.
 
-			![img](https://s3-ap-northeast-2.amazonaws.com/prod-aistages-public/app/Users/00000068/files/593ab0f9-a096-451b-86ea-086fc5575118..png)
+			![img](https://user-images.githubusercontent.com/38639633/123995680-8d975c80-da09-11eb-887b-5946aa82df37.png)
 
 		- `answerCode` 사용자가 해당 문항을 맞췄는지 여부에 대한 이진 데이터이며 0은 사용자가 해당 문항을 틀린 것, 1은 사용자가 해당 문항을 맞춘 것입니다.
 
