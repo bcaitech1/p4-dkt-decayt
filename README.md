@@ -67,7 +67,7 @@
 
 	- notion을 활용한 팀 실험 결과 공유 및 feature engineering EDA 공유
 	- 피어세션 기록 등
-	- [![Tech Blog Badge](http://img.shields.io/badge/-Notion-black?style=for-the-badge&logo=notion&link=https://www.notion.so/Home-b263b1f24c3147ac9f8f2544178d66f6)](https://www.notion.so/Home-b263b1f24c3147ac9f8f2544178d66f6)(클릭!)
+	- **[여기](https://www.notion.so/Home-b263b1f24c3147ac9f8f2544178d66f6)**에서 확인할 수 있습니다.
 
 	
 
